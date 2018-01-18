@@ -6,14 +6,13 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     safe_regions
 
     tau_max = 1;
-    mu_object = 1;
+    mu_object = 1.0;
     num_edges = 4;
 
     min_dist = 0.1;
 
     q_cws = 1;
     q_u = 1;
-    q_eta = 1;
   end
 
   methods
@@ -117,32 +116,83 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addLinearConstraints([],[],Aeq,beq);
     end
 
-    function obj = addKinematicConstraints(obj)
+    function obj = addKinematicConstraints(obj, palm_pos)
       % Constrains the fingers to lie on separate polytope volumes
-      As = [1,1,1;-1,1,1;1,-1,1;-1,-1,1;1,1,-1;-1,1,-1;1,-1,-1;-1,-1,-1];      
-      d_max = 2;
+      obj = obj.addVariable('r', 'C', [3, 1], -inf, inf);
 
-      for j = 1:obj.n_contacts
-        for i = j+1:obj.n_contacts
-          Ai = sparse(8, obj.nv);
-          bi = d_max*ones(8,1);
+      % models compliant actuation on z axis:
+      Aeq = sparse(2,obj.nv);
+      beq = zeros(2,1);
 
-          Ai(:,obj.vars.p.i(:,j)) = As;
-          Ai(:,obj.vars.p.i(:,i)) = -As;
+      Aeq(1,obj.vars.p.i(3,1)) = 1;
+      Aeq(1,obj.vars.p.i(3,2)) = -1;
 
-          obj = obj.addLinearConstraints(Ai,bi,[],[]);
-        end
-      end
+      Aeq(2,obj.vars.p.i(3,1)) = 1;
+      Aeq(2,obj.vars.r.i(3,1)) = -2;
+      Aeq(2,obj.vars.p.i(3,3)) = 1;
+
+      obj = obj.addLinearConstraints([],[],Aeq,beq);
+
+      % all fingers in the same x
+      Aeq = sparse(2,obj.nv);
+      beq = zeros(2,1);
+
+      Aeq(1,obj.vars.p.i(1,1)) = 1;
+      Aeq(1,obj.vars.p.i(1,2)) = -1;
+
+      Aeq(2,obj.vars.p.i(1,1)) = 1;
+      Aeq(2,obj.vars.p.i(1,3)) = -1;
+
+      obj = obj.addLinearConstraints([],[],Aeq,beq);
+
+      % for finger 1
+      Ai = sparse(6,obj.nv);
+      bi = zeros(6,1);
+
+      Ai(1:3,obj.vars.p.i(:,1)) = eye(3);
+      Ai(1:3,obj.vars.r.i(:,1)) = -eye(3);
+      bi(1:3) = [-palm_pos(1) + 10;-palm_pos(2) + 0.036; -palm_pos(3) + 10];
+      Ai(4:6,obj.vars.p.i(:,1)) = -eye(3);
+      Ai(4:6,obj.vars.r.i(:,1)) = eye(3);
+      bi(4:6) = [palm_pos(1) + 10;palm_pos(2) - 0.036; -palm_pos(3) + 10];
+
+      obj = obj.addLinearConstraints(Ai,bi,[],[]);
+
+      % for finger 2
+      Ai = sparse(6,obj.nv);
+      bi = zeros(6,1);
+
+      Ai(1:3,obj.vars.p.i(:,2)) = eye(3);
+      Ai(1:3,obj.vars.r.i(:,1)) = -eye(3);
+      bi(1:3) = [-palm_pos(1) + 10;-palm_pos(2) - 0.036; -palm_pos(3) + 10];
+      Ai(4:6,obj.vars.p.i(:,2)) = -eye(3);
+      Ai(4:6,obj.vars.r.i(:,1)) = eye(3);
+      bi(4:6) = [palm_pos(1) + 10;palm_pos(2) + 0.036; -palm_pos(3) + 10];
+
+      obj = obj.addLinearConstraints(Ai,bi,[],[]);
+
+      % for finger 3
+      Ai = sparse(6,obj.nv);
+      bi = zeros(6,1);
+
+      Ai(1:3,obj.vars.p.i(:,3)) = eye(3);
+      Ai(1:3,obj.vars.r.i(:,1)) = -eye(3);
+      bi(1:3) = [-palm_pos(1) + 10;-palm_pos(2); -palm_pos(3) + 10];
+      Ai(4:6,obj.vars.p.i(:,3)) = -eye(3);
+      Ai(4:6,obj.vars.r.i(:,1)) = eye(3);
+      bi(4:6) = [palm_pos(1) + 10;palm_pos(2); -palm_pos(3) + 10];
+
+      obj = obj.addLinearConstraints(Ai,bi,[],[]);
     end
 
     function obj = addLinConvexDecompositionofBilinearTerms(obj, sides)
       % computes the angular momentum at each timestep
-      % using a linrar approximation of the cross
+      % using a linear approximation of the cross
       % product for the angular momentum contibution
       % of each contact force:
       % l x f = (U+ - U-)/4 
       % with the following tight upper bound:
-      % U+ > (l_bar+f_bar)^2, U- > (l_bar-f_bar)^2 
+      % U+ > |l_bar+f_bar|, U- > |l_bar-f_bar|
       % where we add a quadratic cost at U+ and U-
 
       % introduces the quadratic approximation of bilinear terms
@@ -154,7 +204,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('c_p_f', 'C', [2, obj.n_contacts],-inf, inf);
       obj = obj.addVariable('c_m_f', 'C', [2, obj.n_contacts],-inf, inf);
 
-      % checks the number os fides
+      % checks the number of sides
       if nargin < 2; sides = 8; end
 
       if sides == 4
@@ -341,6 +391,10 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
         Qi(obj.vars.u_min.i(:,j), obj.vars.u_min.i(:,j)) = eye(3);
         Qi(obj.vars.u_plus.i(:,j), obj.vars.u_plus.i(:,j)) = eye(3);
         obj = obj.addCost(obj.q_u*Qi, [], []);
+
+        c = sparse(obj.nv, 1);
+        c(obj.vars.u_min.i(:,j),1) = 1;
+        obj = obj.addCost([], obj.q_u*c, []);
       end
     end
 
@@ -541,7 +595,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       % adds a reward to the cone robustness
       c = sparse(obj.nv, 1);
       c(obj.vars.epsilon.i(:,:),1) = 1;
-      % obj = obj.addCost([], -obj.q_cws*c, []);
+      obj = obj.addCost([], -obj.q_cws*c, []);
 
       % computes the cone at flat ground
       theta = linspace(0,2*pi,obj.num_edges+1);

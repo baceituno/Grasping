@@ -21,10 +21,15 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   % defines the default options
   if nargin < 3; options = struct(); end
   if nargin < 2; n_contacts = 3; end
+  use_kin = true;
 
   % checks the unused option
   if ~isfield(options, 'quad_approx'); options.quad_approx = false; end
-    if ~isfield(options, 'lin_sides'); options.lin_sides = 4; end
+  if ~isfield(options, 'lin_sides'); options.lin_sides = 4; end
+  if ~isfield(options, 'palm_pos') 
+    options.palm_pos = [0;0;0];
+    use_kin = false; 
+  end
 
   assert(n_contacts > 2)
 
@@ -45,8 +50,8 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   planner = MixedIntegerGraspPlanningProblem(safe_regions, n_contacts);
 
   % sets up the costs
-  planner.q_cws = 1e-2;
-  planner.q_u = 1e1;
+  planner.q_cws = 1e2;
+  planner.q_u = 1;
 
   % add constraints
   planner = planner.addConvexRegions();
@@ -58,7 +63,10 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   end
     
   planner = planner.addFrictionConesConstraints();
-  % planner = planner.addKinematicConstraints();
+
+  if use_kin && n_contacts == 3
+    % planner = planner.addKinematicConstraints(options.palm_pos);
+  end
 
   % solves the problem
   planner = planner.solve();

@@ -15,8 +15,12 @@ checkDependency('lcmgl');
 path_handle = addpathTemporary(fileparts(mfilename('fullpath')));
 
 % adds the box polygonal regions
-safe_regions = createBox();
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('lin_sides',4,'quad_approx',false));
+box_size = [0.07;0.07;0.3];
+% [safe_regions, verts] = createBox(box_size);
+safe_regions = createBall();
+
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('lin_sides',4,'quad_approx',false,... 
+													   'palm_pos', [-0.03,0,0]'));
 
 % parses the solution
 p = planner.vars.p.value;

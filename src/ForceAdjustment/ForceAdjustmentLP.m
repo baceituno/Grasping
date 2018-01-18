@@ -6,7 +6,7 @@ classdef ForceAdjustmentLP < Quad_MixedIntegerConvexProgram
     safe_regions
 
     tau_max = 1;
-    mu_object = 1;
+    mu_object = 1.0;
     num_edges = 4;
   end
 
