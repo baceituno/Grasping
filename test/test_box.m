@@ -16,8 +16,8 @@ path_handle = addpathTemporary(fileparts(mfilename('fullpath')));
 
 % adds the box polygonal regions
 box_size = [0.07;0.07;0.3];
-% [safe_regions, verts] = createBox(box_size);
-safe_regions = createBall();
+[safe_regions, verts] = createBox(box_size);
+% [safe_regions, verts] = createBall(0.04);
 
 planner = PlanGraspFromPolygon(safe_regions, 3, struct('lin_sides',4,'quad_approx',false,... 
 													   'palm_pos', [-0.03,0,0]'));

@@ -4,7 +4,7 @@
 % Mechatronics Research Group  %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Visualizes grasp
+% Visualizes a grasp
 
 checkDependency('lcmgl');
 hand = RigidBodyManipulator([getDrakePath,'/examples/IRB140/urdf/irb_140_robotiq_simple_ati.urdf'],struct('floating',false));
