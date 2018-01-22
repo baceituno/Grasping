@@ -9,8 +9,6 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     mu_object = 1.0;
     num_edges = 4;
 
-    min_dist = 0.1;
-
     q_cws = 1;
     q_u = 1;
   end
@@ -85,6 +83,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       assert(offset_eq == size(Aeq, 1));
       obj = obj.addLinearConstraints(Ai, bi, Aeq, beq);
 
+      % constrains each contact to lie on a separate face
       for i = 1:nr
         Ai = sparse(1, obj.nv);
         bi = 1;
@@ -110,8 +109,8 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       Aeq = sparse(3, obj.nv);
       beq = zeros(3, 1);
       for j = 1:obj.n_contacts
-        Aeq(:, obj.vars.u_plus.i(:,j)) = eye(3)/4;
-        Aeq(:, obj.vars.u_min.i(:,j)) = -eye(3)/4;        
+        Aeq(:, obj.vars.u_plus.i(:,j)) = eye(3);
+        Aeq(:, obj.vars.u_min.i(:,j)) = -eye(3);        
       end
       obj = obj.addLinearConstraints([],[],Aeq,beq);
     end
@@ -185,7 +184,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addLinearConstraints(Ai,bi,[],[]);
     end
 
-    function obj = addLinConvexDecompositionofBilinearTerms(obj, sides)
+    function obj = addLinConvexDecompositionofBilinearTerms(obj)
       % computes the angular momentum at each timestep
       % using a linear approximation of the cross
       % product for the angular momentum contibution
@@ -204,33 +203,10 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('c_p_f', 'C', [2, obj.n_contacts],-inf, inf);
       obj = obj.addVariable('c_m_f', 'C', [2, obj.n_contacts],-inf, inf);
 
-      % checks the number of sides
-      if nargin < 2; sides = 8; end
-
-      if sides == 4
-        As = [1,1;-1,1;1,-1;-1,-1];
-        bs = [1;1;1;1];
-      elseif sides == 8
-        As = [1,1;
-              0,1;
-              -1,1;
-              -1,0;
-              -1,-1;
-              0,-1;
-              1,-1;
-              1,0];
-        bs = [1/(2-sqrt(2));(sqrt(2)+1)/2;1/(2-sqrt(2));...
-              (sqrt(2)+1)/2;1/(2-sqrt(2));(sqrt(2)+1)/2;...
-              1/(2-sqrt(2));(sqrt(2)+1)/2];
-      else
-        angles = [0];
-        for i = 1:sides-1
-          angles(end+1) = angles(end) + 2*pi/sides;
-        end
-        pt = [cos(angles);sin(angles)]';
-        [As, bs] = poly2lincon(pt(:,1), pt(:,2));
-        sides = size(As,1);
-      end
+      % defines the approximation constraints
+      As = [1,1;-1,1;1,-1;-1,-1];
+      bs = [1;1;1;1];
+      sides = 4;
 
       % defines the descomposition elements
       for j = 1:obj.n_contacts

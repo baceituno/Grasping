@@ -15,12 +15,15 @@ checkDependency('lcmgl');
 path_handle = addpathTemporary(fileparts(mfilename('fullpath')));
 
 % adds the box polygonal regions
-box_size = [0.07;0.07;0.3];
+box_size = [0.07;0.3;0.07];
 [safe_regions, verts] = createBox(box_size);
-% [safe_regions, verts] = createBall(0.04);
+% [safe_regions, verts] = createOctahedron(0.04);
+% [safe_regions, verts] = createPyramid(0.04);
 
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('lin_sides',4,'quad_approx',false,... 
-													   'palm_pos', [-0.03,0,0]'));
+% use the drake visualizer
+use_viz = false;
+
+planner = PlanGraspFromPolygon(safe_regions, 3, struct());
 
 % parses the solution
 p = planner.vars.p.value;
@@ -35,12 +38,13 @@ end
 
 p
 dk = G*lambda
-G
 rank(G)
 
 regions = planner.vars.region.value'*[1:length(safe_regions)]';
 normals = [];
 friction_cones = cell(planner.n_contacts,1);
+fc = cell(planner.n_contacts,1);
+
 
 % computes the cone at flat ground
 theta = linspace(0,2*pi,planner.num_edges+1);
@@ -53,16 +57,38 @@ for i = 1:planner.n_contacts
 	% computes the cone
 	R_fc = rotateVectorToAlign([0;0;1],safe_regions(regions(i)).normal);
 	friction_cones{i} = R_fc*edges_0;
+	fc{i} = LinearizedFrictionCone(p(:,i),safe_regions(regions(i)).normal,planner.mu_object,R_fc*edges_0);
 end
 
 % runs the force adjustment
-optimal = ForceAdjustmentLP(G, normals);
-optimal = optimal.solve();
+% optimal = ForceAdjustmentLP(G, normals);
+% optimal = optimal.solve();
 
-% improvement percentage
-improvement = (optimal.vars.epsilon.value - planner.vars.epsilon.value)
-cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
+% % difference between vectors
+% cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
 
 % computes the radius of the maximum epsilon ball in the wrench space
 Qw = diag([10;10;10;500;500;500]);
 epsilon = computeQ1LinFC(p,[0,0,0]',friction_cones,Qw)
+
+% draws the resulting grasp
+if use_viz
+	% draws the object
+	lcmgl = drake.matlab.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton,'shape');
+	lcmgl.glColor3f(0,0,1);
+	lcmgl.polyhedron(verts(1,:),verts(2,:),verts(3,:));
+	lcmgl.switchBuffers();
+
+	% draws the cones
+	for i = 1:planner.n_contacts
+		fc{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+	end
+else
+	figure(1)
+	for i = 1:planner.n_contacts
+		fc{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+		hold on
+	end
+	shape = alphaShape(verts(1,:)',verts(2,:)',verts(3,:)');
+	plot(shape);
+end

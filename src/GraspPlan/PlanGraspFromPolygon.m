@@ -16,20 +16,19 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
 %                      v = [x,y,z,yaw] as
 %                      A*v <= b AND normal'*v(1:3) == normal'*point
 % @param options a struct of options:
-% @option Not yet used
+% @option quad_approx: use a quadratic approximation of bilinear term.
+%                      if set to false, the planner uses the linear approx.
+% @option palm_pos: position of the palm of them robot
+% @option use_kin:  constrain the fingers with the kinematics of the hand.
 
   % defines the default options
   if nargin < 3; options = struct(); end
   if nargin < 2; n_contacts = 3; end
-  use_kin = true;
 
   % checks the unused option
   if ~isfield(options, 'quad_approx'); options.quad_approx = false; end
-  if ~isfield(options, 'lin_sides'); options.lin_sides = 4; end
-  if ~isfield(options, 'palm_pos') 
-    options.palm_pos = [0;0;0];
-    use_kin = false; 
-  end
+  if ~isfield(options, 'palm_pos'); options.palm_pos = [-0.03,0,0]'; end
+  if ~isfield(options, 'use_kin'); options.use_kin = false; end
 
   assert(n_contacts > 2)
 
@@ -50,8 +49,8 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   planner = MixedIntegerGraspPlanningProblem(safe_regions, n_contacts);
 
   % sets up the costs
-  planner.q_cws = 1e2;
-  planner.q_u = 1;
+  planner.q_cws = 1e-2;
+  planner.q_u = 1e2;
 
   % add constraints
   planner = planner.addConvexRegions();
@@ -59,13 +58,13 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   if options.quad_approx
     planner = planner.addQuadConvexDecompositionofBilinearTerms();
   else
-    planner = planner.addLinConvexDecompositionofBilinearTerms(options.lin_sides);
+    planner = planner.addLinConvexDecompositionofBilinearTerms();
   end
     
   planner = planner.addFrictionConesConstraints();
 
-  if use_kin && n_contacts == 3
-    % planner = planner.addKinematicConstraints(options.palm_pos);
+  if options.use_kin && n_contacts == 3
+    planner = planner.addKinematicConstraints(options.palm_pos);
   end
 
   % solves the problem
