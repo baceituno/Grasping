@@ -17,13 +17,15 @@ path_handle = addpathTemporary(fileparts(mfilename('fullpath')));
 % adds the box polygonal regions
 box_size = [0.07;0.3;0.07];
 [safe_regions, verts] = createBox(box_size);
-% [safe_regions, verts] = createOctahedron(0.04);
-% [safe_regions, verts] = createPyramid(0.04);
+% [safe_regions, verts] = createOctahedron(0.03);
+% [safe_regions, verts] = createPyramid(0.03);
+% safe_regions = createBall(0.04);
 
 % use the drake visualizer
 use_viz = false;
 
-planner = PlanGraspFromPolygon(safe_regions, 3, struct());
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true));
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true));
 
 % parses the solution
 p = planner.vars.p.value;
@@ -61,11 +63,11 @@ for i = 1:planner.n_contacts
 end
 
 % runs the force adjustment
-% optimal = ForceAdjustmentLP(G, normals);
-% optimal = optimal.solve();
+optimal = ForceAdjustmentLP(G, normals);
+optimal = optimal.solve();
 
 % % difference between vectors
-% cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
+cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
 
 % computes the radius of the maximum epsilon ball in the wrench space
 Qw = diag([10;10;10;500;500;500]);
@@ -73,15 +75,48 @@ epsilon = computeQ1LinFC(p,[0,0,0]',friction_cones,Qw)
 
 % draws the resulting grasp
 if use_viz
+	% declares the arm class
+	arm = Arm();
+	palm_ref = arm.getPalmPos()
+
+	% creates a visualizer
+	v = arm.constructVisualizer();
+
 	% draws the object
 	lcmgl = drake.matlab.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton,'shape');
 	lcmgl.glColor3f(0,0,1);
-	lcmgl.polyhedron(verts(1,:),verts(2,:),verts(3,:));
+	lcmgl.polyhedron(palm_ref(1) + verts(1,:),palm_ref(2) + verts(2,:),...
+					 palm_ref(3) + verts(3,:));
 	lcmgl.switchBuffers();
+
+	% finds the position of the fingers
+	p_1 = palm_ref + p(:,1);
+	p_2 = palm_ref + p(:,2);
+	p_3 = palm_ref + p(:,3);
+
+	p = [p_1, p_2, p_3];
+
+	% solves the arm IK
+	q = arm.SolveIK(p);
+	v.draw(0,q);
+
+	% defines the new cones
+	cones = cell(planner.n_contacts,1);
 
 	% draws the cones
 	for i = 1:planner.n_contacts
-		fc{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+		R_fc = rotateVectorToAlign([0;0;1],safe_regions(regions(i)).normal);
+		cones{i} = LinearizedFrictionCone(p(:,i),safe_regions(regions(i)).normal,planner.mu_object,R_fc*edges_0);
+		cones{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+	end
+
+	while true
+		if i > 3
+			i = 1;
+		end
+		cones{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+
+		i = i+1;
 	end
 else
 	figure(1)

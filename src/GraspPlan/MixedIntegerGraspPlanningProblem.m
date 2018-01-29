@@ -6,7 +6,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     safe_regions
 
     tau_max = 1;
-    mu_object = 1.0;
+    mu_object = 1;
     num_edges = 4;
 
     q_cws = 1;
@@ -31,14 +31,15 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('f_e', 'C', [3, obj.n_contacts],-inf, inf);
 
       % contact surface normal and force cones
-      obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],0, inf);
+      obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],-inf, inf);
       obj = obj.addVariable('epsilon', 'C', [1, 1],0.1, inf);
 
+      % friction cone edge multipliers
       obj = obj.addVariable('lambda_e', 'C', [obj.num_edges, obj.n_contacts],0, inf);
 
       % convex decomposition of bilinear terms
-      obj = obj.addVariable('u_plus', 'C', [3, obj.n_contacts],0, inf);
-      obj = obj.addVariable('u_min', 'C', [3, obj.n_contacts],0, inf);
+      obj = obj.addVariable('u_plus', 'C', [3, obj.n_contacts],-inf, inf);
+      obj = obj.addVariable('u_min', 'C', [3, obj.n_contacts],-inf, inf);
     end
 
     function obj = addConvexRegions(obj)
@@ -48,6 +49,15 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       % where H is a binary matrix with sum(H(i)) == 1
       nr = length(obj.safe_regions);
       obj = obj.addVariable('region', 'B', [nr, obj.n_contacts], 0, 1);
+      
+      % obj.vars.region.lb(1,1) = 1;
+      % obj.vars.region.ub(1,1) = 1;
+
+      % obj.vars.region.lb(2,2) = 1;
+      % obj.vars.region.ub(2,2) = 1;
+
+      % obj.vars.region.lb(3,3) = 1;
+      % obj.vars.region.ub(3,3) = 1;
 
       Ai = sparse((obj.n_contacts) * sum(cellfun(@(x) size(x, 1) + 2, {obj.safe_regions.A})), obj.nv);
       bi = zeros(size(Ai, 1), 1);
@@ -82,8 +92,11 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       end
       assert(offset_eq == size(Aeq, 1));
       obj = obj.addLinearConstraints(Ai, bi, Aeq, beq);
+    end
 
+    function obj = constrainRegions(obj)
       % constrains each contact to lie on a separate face
+      nr = length(obj.safe_regions);
       for i = 1:nr
         Ai = sparse(1, obj.nv);
         bi = 1;
@@ -95,7 +108,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     function obj = addForceClosureConstraints(obj)
       % Constrains force closure over the object:
       % 1) Zero aggregated force
-      % 2) Minimum aggregated torque
+      % 2) Zero aggregated torque
 
       % constrains zero linear force
       Aeq = sparse(3, obj.nv);
@@ -120,21 +133,17 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('r', 'C', [3, 1], -inf, inf);
 
       % models compliant actuation on z axis:
-      Aeq = sparse(2,obj.nv);
-      beq = zeros(2,1);
+      Ai = sparse(1,obj.nv);
+      bi = zeros(1,1);
 
-      Aeq(1,obj.vars.p.i(3,1)) = 1;
-      Aeq(1,obj.vars.p.i(3,2)) = -1;
+      Ai(1,obj.vars.p.i(3,1)) = 1;
+      Ai(1,obj.vars.p.i(3,3)) = -1;
 
-      Aeq(2,obj.vars.p.i(3,1)) = 1;
-      Aeq(2,obj.vars.r.i(3,1)) = -2;
-      Aeq(2,obj.vars.p.i(3,3)) = 1;
-
-      obj = obj.addLinearConstraints([],[],Aeq,beq);
+      obj = obj.addLinearConstraints(Ai,bi,[],[]);
 
       % all fingers in the same x
-      Aeq = sparse(2,obj.nv);
-      beq = zeros(2,1);
+      Aeq = sparse(3,obj.nv);
+      beq = zeros(3,1);
 
       Aeq(1,obj.vars.p.i(1,1)) = 1;
       Aeq(1,obj.vars.p.i(1,2)) = -1;
@@ -370,6 +379,10 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
 
         c = sparse(obj.nv, 1);
         c(obj.vars.u_min.i(:,j),1) = 1;
+        obj = obj.addCost([], obj.q_u*c, []);
+
+        c = sparse(obj.nv, 1);
+        c(obj.vars.u_plus.i(:,j),1) = 1;
         obj = obj.addCost([], obj.q_u*c, []);
       end
     end

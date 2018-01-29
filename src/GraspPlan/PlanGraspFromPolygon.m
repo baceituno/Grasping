@@ -49,8 +49,8 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   planner = MixedIntegerGraspPlanningProblem(safe_regions, n_contacts);
 
   % sets up the costs
-  planner.q_cws = 1e-2;
-  planner.q_u = 1e2;
+  planner.q_cws = 1e-1;
+  planner.q_u = 1;
 
   % add constraints
   planner = planner.addConvexRegions();
@@ -65,9 +65,11 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
 
   if options.use_kin && n_contacts == 3
     planner = planner.addKinematicConstraints(options.palm_pos);
+  else
+    planner = planner.constrainRegions();
   end
 
   % solves the problem
   planner = planner.solve();
-  
+
 end
