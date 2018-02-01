@@ -25,7 +25,6 @@ box_size = [0.07;0.3;0.07];
 use_viz = false;
 
 planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true));
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true));
 
 % parses the solution
 p = planner.vars.p.value;

@@ -44,7 +44,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
 
     function obj = addConvexRegions(obj)
       % Add mixed-integer constraints that require that 
-      % each contact lie within one of those safe regions described by A and b.
+      % each contact lie within one of the safe regions described by A and b.
       % such that for contact i H(i,:) implies that A*fi < b
       % where H is a binary matrix with sum(H(i)) == 1
       nr = length(obj.safe_regions);
@@ -92,6 +92,75 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       end
       assert(offset_eq == size(Aeq, 1));
       obj = obj.addLinearConstraints(Ai, bi, Aeq, beq);
+    end
+
+    function obj = addVregions(obj)
+      % Add mixed-integer constraints that require that 
+      % each contact lie within one of the regions described by vertices
+      % using a logarithmic number of integer variables, as decribed in
+      % Modeling Disjunctive Constraints with a Logarithmic Number of Binary
+      % Variables and Constraints by J. Vielma and G. Nemhauser, 2011.
+
+      % defines the lambdas
+      nr = length(obj.safe_regions);
+      obj = obj.addVariable('lambda', 'C', [nr, obj.n_contacts], 0, 1);
+
+      % defines the log2 binary variables
+      ny = ceil(log2(nr));
+      obj = obj.addVariable('region', 'B', [ny, obj.n_contacts], 0, 1);
+
+      % adds the sos1 constraint on lambda
+      for i = 1:obj.n_contacts
+        Aeq = sparse(1, obj.nv);
+        beq = 1;
+        Aeq(1, obj.vars.lambda.i(:,i)) = 1;
+        obj = obj.addLinearConstraints([], [], Aeq, beq);        
+      end
+
+      % defines the gray coding on base 2
+      codes = grayCodes(2,ny);
+      codes = codes(1:nr,1:ny);
+
+      % adds the constraints on coding
+      for i = 1:obj.n_contacts
+        % for each digit
+        for j = 1:ny
+          Ai = sparse(2, obj.nv);
+          bi = [0;1];
+          % for each lambda
+          for k = 1:nr
+            if codes(k,j) == 1
+              Ai(1, obj.vars.lambda.i(i,k)) = 1;
+            elseif codes(k,j) == 0
+              Ai(2, obj.vars.lambda.i(i,k)) = 1;
+            else
+              error('codes need to be 0 or 1');
+            end  
+          end
+          Ai(1, obj.vars.region.i(i,j)) = -1;
+          Ai(2, obj.vars.region.i(i,j)) = 1;
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+        end
+      end
+
+      % big M
+      M = 100;
+
+      % constrains each contact to a single region
+      obj = obj.addVariable('w', 'C', [3, obj.n_contacts], 0, inf);
+      for i = 1:n_contacts
+        for j = 1:nr
+          % TODO: finish this function
+        end
+      end
+
+      % all weights must add to one
+      for i = 1:obj.n_contacts
+        Aeq = sparse(1, obj.nv);
+        beq = 1;
+        Aeq(1, obj.vars.w.i(:,i)) = 1;
+        obj = obj.addLinearConstraints([], [], Aeq, beq);        
+      end
     end
 
     function obj = constrainRegions(obj)
