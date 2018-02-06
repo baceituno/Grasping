@@ -16,15 +16,18 @@ path_handle = addpathTemporary(fileparts(mfilename('fullpath')));
 
 % adds the box polygonal regions
 box_size = [0.07;0.3;0.07];
-[safe_regions, verts] = createBox(box_size);
+verts = [];
+% [safe_regions, verts] = createBox(box_size);
 % [safe_regions, verts] = createOctahedron(0.03);
 % [safe_regions, verts] = createPyramid(0.03);
 % safe_regions = createBall(0.04);
 
-% use the drake visualizer
+b = Shape('bunny3.obj');
+safe_regions = b.getRegions();
+% use the drake visualizer 
 use_viz = false;
 
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true));
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true, 'logvars', true));
 
 % parses the solution
 p = planner.vars.p.value;
@@ -63,10 +66,12 @@ end
 
 % runs the force adjustment
 optimal = ForceAdjustmentLP(G, normals);
-optimal = optimal.solve();
+optimal = optimal.solveMosek();
+
+optimal.vars.epsilon.value
 
 % % difference between vectors
-cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
+% cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
 
 % computes the radius of the maximum epsilon ball in the wrench space
 Qw = diag([10;10;10;500;500;500]);
@@ -80,6 +85,11 @@ if use_viz
 
 	% creates a visualizer
 	v = arm.constructVisualizer();
+
+	b = Shape('bunny2.obj');
+	if size(verts,1) == 0
+		verts = b.vertices';
+	end
 
 	% draws the object
 	lcmgl = drake.matlab.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton,'shape');
@@ -123,6 +133,12 @@ else
 		fc{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
 		hold on
 	end
+
+	b = Shape('bunny.obj');
+	if size(verts,1) == 0
+		verts = b.vertices';
+	end
+
 	shape = alphaShape(verts(1,:)',verts(2,:)',verts(3,:)');
 	plot(shape);
 end

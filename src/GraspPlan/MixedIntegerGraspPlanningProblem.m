@@ -6,8 +6,10 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     safe_regions
 
     tau_max = 1;
-    mu_object = 1;
+    mu_object = 1.0;
     num_edges = 4;
+
+    com = zeros(3,1);
 
     q_cws = 1;
     q_u = 1;
@@ -24,15 +26,17 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj@Quad_MixedIntegerConvexProgram();
       obj.n_contacts = n_contacts;
       obj.safe_regions = safe_regions;
+      if isfield(safe_regions(1),'isV'); obj.com = obj.safe_regions(1).com; end
 
       % Contact locations
       obj = obj.addVariable('p', 'C', [3, obj.n_contacts], -inf, inf);
+      obj = obj.addVariable('l', 'C', [3, obj.n_contacts], -inf, inf);
       % Contact forces
       obj = obj.addVariable('f_e', 'C', [3, obj.n_contacts],-inf, inf);
 
       % contact surface normal and force cones
       obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],-inf, inf);
-      obj = obj.addVariable('epsilon', 'C', [1, 1],0.1, inf);
+      obj = obj.addVariable('epsilon', 'C', [1, 1],0.5, inf);
 
       % friction cone edge multipliers
       obj = obj.addVariable('lambda_e', 'C', [obj.num_edges, obj.n_contacts],0, inf);
@@ -48,16 +52,45 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       % such that for contact i H(i,:) implies that A*fi < b
       % where H is a binary matrix with sum(H(i)) == 1
       nr = length(obj.safe_regions);
-      obj = obj.addVariable('region', 'B', [nr, obj.n_contacts], 0, 1);
-      
-      % obj.vars.region.lb(1,1) = 1;
-      % obj.vars.region.ub(1,1) = 1;
+      obj = obj.addVariable('region', 'C', [nr, obj.n_contacts], 0, 1);
 
-      % obj.vars.region.lb(2,2) = 1;
-      % obj.vars.region.ub(2,2) = 1;
+      % defines the log2 binary variables
+      ny = ceil(log2(nr));
+      obj = obj.addVariable('y', 'B', [ny, obj.n_contacts], 0, 1);
 
-      % obj.vars.region.lb(3,3) = 1;
-      % obj.vars.region.ub(3,3) = 1;
+      % adds the sos1 constraint on lambda
+      for i = 1:obj.n_contacts
+        Aeq = sparse(1, obj.nv);
+        beq = 1;
+        Aeq(1, obj.vars.region.i(:,i)) = 1;
+        obj = obj.addLinearConstraints([], [], Aeq, beq);        
+      end
+
+      % defines the gray coding on base 2
+      codes = grayCodes(2,ny);
+      codes = codes(1:nr,:);
+
+      % adds the constraints on coding
+      for i = 1:obj.n_contacts
+        % for each digit
+        for j = 1:ny
+          Ai = sparse(2, obj.nv);
+          bi = [0;1];
+          % for each lambda
+          for k = 1:nr
+            if codes(k,j) == 1
+              Ai(1, obj.vars.region.i(k,i)) = 1;
+            elseif codes(k,j) == 0
+              Ai(2, obj.vars.region.i(k,i)) = 1;
+            else
+              error('codes need to be 0 or 1');
+            end  
+          end
+          Ai(1, obj.vars.y.i(j,i)) = -1;
+          Ai(2, obj.vars.y.i(j,i)) = 1;
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+        end
+      end
 
       Ai = sparse((obj.n_contacts) * sum(cellfun(@(x) size(x, 1) + 2, {obj.safe_regions.A})), obj.nv);
       bi = zeros(size(Ai, 1), 1);
@@ -94,72 +127,138 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addLinearConstraints(Ai, bi, Aeq, beq);
     end
 
-    function obj = addVregions(obj)
+    function obj = addVregions(obj, logvars)
       % Add mixed-integer constraints that require that 
       % each contact lie within one of the regions described by vertices
       % using a logarithmic number of integer variables, as decribed in
       % Modeling Disjunctive Constraints with a Logarithmic Number of Binary
       % Variables and Constraints by J. Vielma and G. Nemhauser, 2011.
 
-      % defines the lambdas
-      nr = length(obj.safe_regions);
-      obj = obj.addVariable('lambda', 'C', [nr, obj.n_contacts], 0, 1);
+      if logvars
+        % defines the lambdas
+        nr = length(obj.safe_regions);
+        obj = obj.addVariable('region', 'C', [nr, obj.n_contacts], 0, 1);
 
-      % defines the log2 binary variables
-      ny = ceil(log2(nr));
-      obj = obj.addVariable('region', 'B', [ny, obj.n_contacts], 0, 1);
+        % defines the log2 binary variables
+        ny = ceil(log2(nr));
+        obj = obj.addVariable('y', 'B', [ny, obj.n_contacts], 0, 1);
 
-      % adds the sos1 constraint on lambda
-      for i = 1:obj.n_contacts
-        Aeq = sparse(1, obj.nv);
-        beq = 1;
-        Aeq(1, obj.vars.lambda.i(:,i)) = 1;
-        obj = obj.addLinearConstraints([], [], Aeq, beq);        
-      end
-
-      % defines the gray coding on base 2
-      codes = grayCodes(2,ny);
-      codes = codes(1:nr,1:ny);
-
-      % adds the constraints on coding
-      for i = 1:obj.n_contacts
-        % for each digit
-        for j = 1:ny
-          Ai = sparse(2, obj.nv);
-          bi = [0;1];
-          % for each lambda
-          for k = 1:nr
-            if codes(k,j) == 1
-              Ai(1, obj.vars.lambda.i(i,k)) = 1;
-            elseif codes(k,j) == 0
-              Ai(2, obj.vars.lambda.i(i,k)) = 1;
-            else
-              error('codes need to be 0 or 1');
-            end  
-          end
-          Ai(1, obj.vars.region.i(i,j)) = -1;
-          Ai(2, obj.vars.region.i(i,j)) = 1;
-          obj = obj.addLinearConstraints(Ai, bi, [], []);
+        % adds the sos1 constraint on lambda
+        for i = 1:obj.n_contacts
+          Aeq = sparse(1, obj.nv);
+          beq = 1;
+          Aeq(1, obj.vars.region.i(:,i)) = 1;
+          obj = obj.addLinearConstraints([], [], Aeq, beq);        
         end
-      end
 
-      % big M
-      M = 100;
+        % defines the gray coding on base 2
+        codes = grayCodes(2,ny);
+        codes = codes(1:nr,:);
+
+        % adds the constraints on coding
+        for i = 1:obj.n_contacts
+          % for each digit
+          for j = 1:ny
+            Ai = sparse(2, obj.nv);
+            bi = [0;1];
+            % for each lambda
+            for k = 1:nr
+              if codes(k,j) == 1
+                Ai(1, obj.vars.region.i(k,i)) = 1;
+              elseif codes(k,j) == 0
+                Ai(2, obj.vars.region.i(k,i)) = 1;
+              else
+                error('codes need to be 0 or 1');
+              end  
+            end
+            Ai(1, obj.vars.y.i(j,i)) = -1;
+            Ai(2, obj.vars.y.i(j,i)) = 1;
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+          end
+        end
+      else
+        nr = length(obj.safe_regions);
+        obj = obj.addVariable('region', 'B', [nr, obj.n_contacts], 0, 1);
+      end
+        
 
       % constrains each contact to a single region
-      obj = obj.addVariable('w', 'C', [3, obj.n_contacts], 0, inf);
-      for i = 1:n_contacts
-        for j = 1:nr
-          % TODO: finish this function
-        end
-      end
+      use_3 = 0;
+      if use_3 == 1
+        disp('with big-M');
+        % uses all weights
+        % uses three weights only
+        obj = obj.addVariable('w', 'C', [3, obj.n_contacts], 0, inf);
+        
+        % we define a big M
+        M = 10;
 
-      % all weights must add to one
-      for i = 1:obj.n_contacts
-        Aeq = sparse(1, obj.nv);
-        beq = 1;
-        Aeq(1, obj.vars.w.i(:,i)) = 1;
-        obj = obj.addLinearConstraints([], [], Aeq, beq);        
+        % for each contact and region
+        for i = 1:obj.n_contacts
+          idx = zeros(3,1);
+          for j = 1:nr
+            Ai = sparse(6, obj.nv);
+            bi = M*ones(6,1);
+            % the contact must be in a linear combination
+            % of the vertices.
+            Ai(1:3, obj.vars.p.i(:,i)) = eye(3);
+            Ai(4:6, obj.vars.p.i(:,i)) = -eye(3);
+            for k = 1:3
+              Ai(1:3, obj.vars.w.i(k,i)) = -obj.safe_regions(j).vertices(:,k);
+              Ai(4:6, obj.vars.w.i(k,i)) = obj.safe_regions(j).vertices(:,k);
+            end
+            % big-M constraint
+            Ai(:, obj.vars.region.i(j,i)) = M;
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+          end
+        end
+
+        % all weights must add to one
+        for i = 1:obj.n_contacts
+          Aeq = sparse(1, obj.nv);
+          beq = 1;
+          Aeq(1, obj.vars.w.i(:,i)) = 1;
+          obj = obj.addLinearConstraints([], [], Aeq, beq);        
+        end
+      else
+        disp('without big-M');
+        % uses a weight for each vertex
+        obj = obj.addVariable('w', 'C', [3*nr, obj.n_contacts], 0, inf);
+        
+        % makes all the weights add up to 1
+        for i = 1:obj.n_contacts
+            Aeq = sparse(1, obj.nv);
+            beq = 1;
+            Aeq(1, obj.vars.w.i(:,i)) = 1;
+            obj = obj.addLinearConstraints([], [], Aeq, beq);        
+        end
+
+        % for each region
+        for i = 1:obj.n_contacts
+          % Çosntrains the contact
+          Aeq = sparse(3, obj.nv);
+          beq = zeros(3,1);
+          
+          Aeq(1:3, obj.vars.p.i(:,i)) = eye(3);
+          for j = 1:nr
+            idx = (j-1)*3 + 1;
+            Aeq(1:3, obj.vars.w.i(idx:idx+2,i)) = -obj.safe_regions(j).vertices(:,1:3);
+          end
+          obj = obj.addLinearConstraints([], [], Aeq, beq);
+
+          for j = 1:nr
+            % adds requires the sum of the weights to be
+            % at most lambda
+            Ai = sparse(1, obj.nv);
+            bi = 0;
+
+            idx = (j-1)*3 + 1;
+            Ai(1, obj.vars.w.i(idx:idx+2,i)) = 1;
+            Ai(1, obj.vars.region.i(j,i)) = -1;
+            
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+          end
+        end
       end
     end
 
@@ -187,6 +286,15 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       end
       obj = obj.addLinearConstraints([],[],Aeq,beq);
 
+      % gets the distance to CoM
+      for j = 1:obj.n_contacts
+        Aeq = sparse(3, obj.nv);
+        beq = obj.com;
+        Aeq(:, obj.vars.p.i(:,j)) = eye(3);
+        Aeq(:, obj.vars.l.i(:,j)) = -eye(3);
+        obj = obj.addLinearConstraints([],[],Aeq,beq);
+      end
+
       % obtains the angular segment
       Aeq = sparse(3, obj.nv);
       beq = zeros(3, 1);
@@ -209,6 +317,18 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       Ai(1,obj.vars.p.i(3,3)) = -1;
 
       obj = obj.addLinearConstraints(Ai,bi,[],[]);
+
+      % forces must point in a single direction
+      Ai = sparse(3,obj.nv);
+      bi = zeros(3,1);
+
+      Ai(1,obj.vars.f_e.i(3,3)) = -1;
+      bi(1,1) = -0.5;
+      Ai(2,obj.vars.f_e.i(3,2)) = 1;
+      bi(2,1) = 0.5;
+      Ai(3,obj.vars.f_e.i(3,1)) = 1;
+      bi(3,1) = 0.5;
+      % obj = obj.addLinearConstraints(Ai,bi,[],[]);
 
       % all fingers in the same x
       Aeq = sparse(3,obj.nv);
@@ -298,9 +418,9 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
         cpf_idx = obj.vars.c_p_f.i(:,j);
         cmf_idx = obj.vars.c_m_f.i(:,j);
 
-        l_1_idx = obj.vars.p.i(1,j);
-        l_2_idx = obj.vars.p.i(2,j);
-        l_3_idx = obj.vars.p.i(3,j);
+        l_1_idx = obj.vars.l.i(1,j);
+        l_2_idx = obj.vars.l.i(2,j);
+        l_3_idx = obj.vars.l.i(3,j);
 
         f_1_idx = obj.vars.f_e.i(1,j);
         f_2_idx = obj.vars.f_e.i(2,j);
@@ -487,9 +607,9 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
         cpf_idx = obj.vars.c_p_f.i(:,j);
         cmf_idx = obj.vars.c_m_f.i(:,j);
 
-        l_1_idx = obj.vars.p.i(1,j);
-        l_2_idx = obj.vars.p.i(2,j);
-        l_3_idx = obj.vars.p.i(3,j);
+        l_1_idx = obj.vars.l.i(1,j);
+        l_2_idx = obj.vars.l.i(2,j);
+        l_3_idx = obj.vars.l.i(3,j);
 
         f_1_idx = obj.vars.f_e.i(1,j);
         f_2_idx = obj.vars.f_e.i(2,j);

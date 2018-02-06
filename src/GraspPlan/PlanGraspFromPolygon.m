@@ -29,21 +29,9 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   if ~isfield(options, 'quad_approx'); options.quad_approx = false; end
   if ~isfield(options, 'palm_pos'); options.palm_pos = [-0.03,0,0]'; end
   if ~isfield(options, 'use_kin'); options.use_kin = false; end
+  if ~isfield(options, 'logvars'); options.logvars = true; end
 
   assert(n_contacts > 2)
-
-  for j = 1:length(safe_regions)
-    sizecheck(safe_regions(j).A, [NaN, 3]);
-    sizecheck(safe_regions(j).b, [size(safe_regions(j).A, 1), 1]);
-    sizecheck(safe_regions(j).point, [3,1]);
-    sizecheck(safe_regions(j).normal, [3,1]);
-    safe_regions(j).normal = safe_regions(j).normal/norm(safe_regions(j).normal);
-    for k = 1:size(safe_regions(j).A, 1)
-      n = norm(safe_regions(j).A(k,:));
-      safe_regions(j).A(k,:) = safe_regions(j).A(k,:)/n;
-      safe_regions(j).b(k) = safe_regions(j).b(k)/n;
-    end
-  end
 
   % defines the optimization problem
   planner = MixedIntegerGraspPlanningProblem(safe_regions, n_contacts);
@@ -52,8 +40,30 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   planner.q_cws = 1e-1;
   planner.q_u = 1;
 
-  % add constraints
-  planner = planner.addConvexRegions();
+  % add regional constraints
+  if ~isfield(safe_regions(1), 'isV')
+    for j = 1:length(safe_regions)
+      sizecheck(safe_regions(j).A, [NaN, 3]);
+      sizecheck(safe_regions(j).b, [size(safe_regions(j).A, 1), 1]);
+      sizecheck(safe_regions(j).point, [3,1]);
+      sizecheck(safe_regions(j).normal, [3,1]);
+      safe_regions(j).normal = safe_regions(j).normal/norm(safe_regions(j).normal);
+      for k = 1:size(safe_regions(j).A, 1)
+        n = norm(safe_regions(j).A(k,:));
+        safe_regions(j).A(k,:) = safe_regions(j).A(k,:)/n;
+        safe_regions(j).b(k) = safe_regions(j).b(k)/n;
+      end
+    end
+    planner = planner.addConvexRegions();
+  else
+    for j = 1:length(safe_regions)
+      sizecheck(safe_regions(j).normal, [3,1]);
+      safe_regions(j).normal = safe_regions(j).normal/norm(safe_regions(j).normal);
+    end
+    planner = planner.addVregions(options.logvars);
+  end
+  
+  % add force closure constraints
   planner = planner.addForceClosureConstraints();
   if options.quad_approx
     planner = planner.addQuadConvexDecompositionofBilinearTerms();
@@ -70,6 +80,8 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   end
 
   % solves the problem
-  planner = planner.solve();
+  t0 = tic();
+  planner = planner.solveMosek();
+  toc(t0)
 
 end
