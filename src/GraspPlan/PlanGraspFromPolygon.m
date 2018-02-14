@@ -81,7 +81,7 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
 
   % solves the problem
   t0 = tic();
-  planner = planner.solveMosek();
+  planner = planner.solve();
   toc(t0)
 
 end

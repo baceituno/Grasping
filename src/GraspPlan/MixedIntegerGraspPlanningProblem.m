@@ -36,7 +36,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
 
       % contact surface normal and force cones
       obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],-inf, inf);
-      obj = obj.addVariable('epsilon', 'C', [1, 1],0.5, inf);
+      obj = obj.addVariable('epsilon', 'C', [1, 1],0.1, inf);
 
       % friction cone edge multipliers
       obj = obj.addVariable('lambda_e', 'C', [obj.num_edges, obj.n_contacts],0, inf);

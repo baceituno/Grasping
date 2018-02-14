@@ -27,7 +27,8 @@ safe_regions = b.getRegions();
 % use the drake visualizer 
 use_viz = false;
 
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'use_kin', true, 'logvars', true));
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false,...
+												'use_kin', true, 'logvars', true));
 
 % parses the solution
 p = planner.vars.p.value;
@@ -44,7 +45,7 @@ p
 dk = G*lambda
 rank(G)
 
-regions = planner.vars.region.value'*[1:length(safe_regions)]';
+regions = int8(planner.vars.region.value'*[1:length(safe_regions)]');
 normals = [];
 friction_cones = cell(planner.n_contacts,1);
 fc = cell(planner.n_contacts,1);
@@ -66,7 +67,7 @@ end
 
 % runs the force adjustment
 optimal = ForceAdjustmentLP(G, normals);
-optimal = optimal.solveMosek();
+optimal = optimal.solve();
 
 optimal.vars.epsilon.value
 
