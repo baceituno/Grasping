@@ -6,7 +6,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
     safe_regions
 
     tau_max = 1;
-    mu_object = 1.0;
+    mu_object = 1;
     num_edges = 4;
 
     com = zeros(3,1);
@@ -36,7 +36,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
 
       % contact surface normal and force cones
       obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],-inf, inf);
-      obj = obj.addVariable('epsilon', 'C', [1, 1],0.1, inf);
+      obj = obj.addVariable('epsilon', 'C', [1, 1],0.5, inf);
 
       % friction cone edge multipliers
       obj = obj.addVariable('lambda_e', 'C', [obj.num_edges, obj.n_contacts],0, inf);
@@ -180,84 +180,42 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
         nr = length(obj.safe_regions);
         obj = obj.addVariable('region', 'B', [nr, obj.n_contacts], 0, 1);
       end
-        
-
-      % constrains each contact to a single region
-      use_3 = 0;
-      if use_3 == 1
-        disp('with big-M');
-        % uses all weights
-        % uses three weights only
-        obj = obj.addVariable('w', 'C', [3, obj.n_contacts], 0, inf);
-        
-        % we define a big M
-        M = 10;
-
-        % for each contact and region
-        for i = 1:obj.n_contacts
-          idx = zeros(3,1);
-          for j = 1:nr
-            Ai = sparse(6, obj.nv);
-            bi = M*ones(6,1);
-            % the contact must be in a linear combination
-            % of the vertices.
-            Ai(1:3, obj.vars.p.i(:,i)) = eye(3);
-            Ai(4:6, obj.vars.p.i(:,i)) = -eye(3);
-            for k = 1:3
-              Ai(1:3, obj.vars.w.i(k,i)) = -obj.safe_regions(j).vertices(:,k);
-              Ai(4:6, obj.vars.w.i(k,i)) = obj.safe_regions(j).vertices(:,k);
-            end
-            % big-M constraint
-            Ai(:, obj.vars.region.i(j,i)) = M;
-            obj = obj.addLinearConstraints(Ai, bi, [], []);
-          end
-        end
-
-        % all weights must add to one
-        for i = 1:obj.n_contacts
+      
+      % uses a weight for each vertex
+      obj = obj.addVariable('w', 'C', [3*nr, obj.n_contacts], 0, inf);
+      
+      % makes all the weights add up to 1
+      for i = 1:obj.n_contacts
           Aeq = sparse(1, obj.nv);
           beq = 1;
           Aeq(1, obj.vars.w.i(:,i)) = 1;
           obj = obj.addLinearConstraints([], [], Aeq, beq);        
-        end
-      else
-        disp('without big-M');
-        % uses a weight for each vertex
-        obj = obj.addVariable('w', 'C', [3*nr, obj.n_contacts], 0, inf);
+      end
+
+      % for each region
+      for i = 1:obj.n_contacts
+        % constrains each contact to a single region
+        Aeq = sparse(3, obj.nv);
+        beq = zeros(3,1);
         
-        % makes all the weights add up to 1
-        for i = 1:obj.n_contacts
-            Aeq = sparse(1, obj.nv);
-            beq = 1;
-            Aeq(1, obj.vars.w.i(:,i)) = 1;
-            obj = obj.addLinearConstraints([], [], Aeq, beq);        
+        Aeq(1:3, obj.vars.p.i(:,i)) = eye(3);
+        for j = 1:nr
+          idx = (j-1)*3 + 1;
+          Aeq(1:3, obj.vars.w.i(idx:idx+2,i)) = -obj.safe_regions(j).vertices(:,1:3);
         end
+        obj = obj.addLinearConstraints([], [], Aeq, beq);
 
-        % for each region
-        for i = 1:obj.n_contacts
-          % Çosntrains the contact
-          Aeq = sparse(3, obj.nv);
-          beq = zeros(3,1);
+        for j = 1:nr
+          % adds requires the sum of the weights to be
+          % at most lambda
+          Ai = sparse(1, obj.nv);
+          bi = 0;
+
+          idx = (j-1)*3 + 1;
+          Ai(1, obj.vars.w.i(idx:idx+2,i)) = 1;
+          Ai(1, obj.vars.region.i(j,i)) = -1;
           
-          Aeq(1:3, obj.vars.p.i(:,i)) = eye(3);
-          for j = 1:nr
-            idx = (j-1)*3 + 1;
-            Aeq(1:3, obj.vars.w.i(idx:idx+2,i)) = -obj.safe_regions(j).vertices(:,1:3);
-          end
-          obj = obj.addLinearConstraints([], [], Aeq, beq);
-
-          for j = 1:nr
-            % adds requires the sum of the weights to be
-            % at most lambda
-            Ai = sparse(1, obj.nv);
-            bi = 0;
-
-            idx = (j-1)*3 + 1;
-            Ai(1, obj.vars.w.i(idx:idx+2,i)) = 1;
-            Ai(1, obj.vars.region.i(j,i)) = -1;
-            
-            obj = obj.addLinearConstraints(Ai, bi, [], []);
-          end
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
         end
       end
     end

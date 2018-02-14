@@ -38,7 +38,7 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
 
   % sets up the costs
   planner.q_cws = 1e-1;
-  planner.q_u = 1;
+  planner.q_u = 1e2;
 
   % add regional constraints
   if ~isfield(safe_regions(1), 'isV')
