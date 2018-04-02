@@ -27,7 +27,7 @@ safe_regions = b.getRegions();
 % use the drake visualizer 
 use_viz = false;
 
-planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false,...
+planner = PlanGraspFromPolygon(safe_regions, 3, struct('quad_approx', false, 'cage', true,...
 												'use_kin', true, 'logvars', true));
 
 % parses the solution
@@ -66,10 +66,10 @@ for i = 1:planner.n_contacts
 end
 
 % runs the force adjustment
-optimal = ForceAdjustmentLP(G, normals);
-optimal = optimal.solve();
+% optimal = ForceAdjustmentLP(G, normals);
+% optimal = optimal.solve();
 
-optimal.vars.epsilon.value
+% optimal.vars.epsilon.value
 
 % % difference between vectors
 % cross_diff = mean(mean(cross(optimal.vars.f_e.value,f).^2))
@@ -131,7 +131,7 @@ if use_viz
 else
 	figure(1)
 	for i = 1:planner.n_contacts
-		fc{i}.plot(use_viz, 0.07, sprintf('cone_%d',i));
+		fc{i}.plot(use_viz, 0.06, sprintf('cone_%d',i));
 		hold on
 	end
 

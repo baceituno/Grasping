@@ -36,7 +36,7 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
 
       % contact surface normal and force cones
       obj = obj.addVariable('alpha', 'C', [1, obj.n_contacts],-inf, inf);
-      obj = obj.addVariable('epsilon', 'C', [1, 1],0.5, inf);
+      obj = obj.addVariable('epsilon', 'C', [1, 1],0.1, inf);
 
       % friction cone edge multipliers
       obj = obj.addVariable('lambda_e', 'C', [obj.num_edges, obj.n_contacts],0, inf);
@@ -277,16 +277,12 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addLinearConstraints(Ai,bi,[],[]);
 
       % forces must point in a single direction
-      Ai = sparse(3,obj.nv);
-      bi = zeros(3,1);
+      Aeq = sparse(1,obj.nv);
+      beq = zeros(1,1);
 
-      Ai(1,obj.vars.f_e.i(3,3)) = -1;
-      bi(1,1) = -0.5;
-      Ai(2,obj.vars.f_e.i(3,2)) = 1;
-      bi(2,1) = 0.5;
-      Ai(3,obj.vars.f_e.i(3,1)) = 1;
-      bi(3,1) = 0.5;
-      % obj = obj.addLinearConstraints(Ai,bi,[],[]);
+      Aeq(1,obj.vars.f_e.i(3,2)) = 1;
+      Aeq(1,obj.vars.f_e.i(3,1)) = -1;
+      % obj = obj.addLinearConstraints([],[],Aeq,beq);
 
       % all fingers in the same x
       Aeq = sparse(3,obj.nv);
@@ -717,6 +713,84 @@ classdef MixedIntegerGraspPlanningProblem < Quad_MixedIntegerConvexProgram
         Qi(obj.vars.u_min.i(:,j), obj.vars.u_min.i(:,j)) = eye(3);
         Qi(obj.vars.u_plus.i(:,j), obj.vars.u_plus.i(:,j)) = eye(3);
         obj = obj.addCost(obj.q_u*Qi, [], []);
+      end
+    end
+
+    function obj = addFmaxCageConstraints(obj, radius, coords, use_qc)
+      % requires that the fingers cage a circle/sphere 
+      % inscribed within the object with a given radius
+      % @param coords: 3x1 vector with the dimensions used
+      %                to measure the distance
+      % @param radius: radius of the inscribed circle
+      % @param use_qc: use quadratic constraints to measure the distance
+      %                this approach works better but is slower
+      
+      % uses LP constraints by default
+      if nargin < 4; use_qc = false; end
+      % uses a circle in YZ by default
+      if nargin < 3; coords = [0,1,1]'; end
+
+      if use_qc == false
+        % defines absolute value reference
+        mult = [1,1,1; 1,1,-1; 1,-1,1; 1,-1,-1; -1,1,1;...
+                -1,1,-1; -1,-1,1; -1,-1,-1];
+
+        % checks for each pair
+        for j = 1:obj.n_contacts
+          % finger pairs
+          idx_1 = j;
+          idx_2 = j+1;
+
+          % circular list
+          if idx_2 > obj.n_contacts; idx_2 = 1; end
+
+          % adds the constraint that each distance must be smaller than \
+          % the diameter of the sphere/circle
+          Ai = sparse(8,obj.nv);
+          bi = 2*radius*ones(8,1);
+
+          % for each coordinate
+          for k = 1:8
+            for i = 1:3
+              if coords(i)
+                Ai(1,obj.vars.p.i(i,idx_1)) = mult(k,i);
+                Ai(1,obj.vars.p.i(i,idx_2)) = -mult(k,i);
+              end
+            end
+          end
+
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+        end
+      else
+        % defines a distance variable
+        obj = obj.addVariable('d', 'C', [3, obj.n_contacts], -inf, inf);
+
+        % checks for each pair
+        for j = 1:obj.n_contacts
+          % finger pairs
+          idx_1 = j;
+          idx_2 = j+1;
+
+
+          % circular list
+          if idx_2 > obj.n_contacts; idx_2 = 1; end
+          
+          % computes the distance
+          Aeq = sparse(3,obj.nv);
+          beq = zeros(3,1);
+
+          Aeq(:,obj.vars.p.i(:,idx_1)) = eye(3);
+          Aeq(:,obj.vars.p.i(:,idx_2)) = -eye(3);
+          Aeq(:,obj.vars.d.i(:,j)) = -eye(3);
+
+          obj = obj.addLinearConstraints([], [], Aeq, beq);
+
+          % adds a qued con
+          quadcon = struct('Qc', sparse(obj.nv, obj.nv), 'q', zeros(obj.nv, 1), 'rhs', (2*radius)^2);
+          quadcon.Qc(obj.vars.d.i(:,j), obj.vars.d.i(:,j)) = diag([coords]);
+
+          obj = obj.addQuadcon(quadcon);
+        end
       end
     end
 

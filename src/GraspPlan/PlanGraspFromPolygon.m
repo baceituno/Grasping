@@ -30,6 +30,7 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   if ~isfield(options, 'palm_pos'); options.palm_pos = [-0.03,0,0]'; end
   if ~isfield(options, 'use_kin'); options.use_kin = false; end
   if ~isfield(options, 'logvars'); options.logvars = true; end
+  if ~isfield(options, 'cage'); options.cage = true; end
 
   assert(n_contacts > 2)
 
@@ -37,8 +38,8 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   planner = MixedIntegerGraspPlanningProblem(safe_regions, n_contacts);
 
   % sets up the costs
-  planner.q_cws = 1e-1;
-  planner.q_u = 1e2;
+  planner.q_cws = 1e-2;
+  planner.q_u = 1;
 
   % add regional constraints
   if ~isfield(safe_regions(1), 'isV')
@@ -78,6 +79,9 @@ function planner = PlanGraspFromPolygon(safe_regions, n_contacts, options)
   else
     planner = planner.constrainRegions();
   end
+
+  % adds cage constraints
+  if options.cage; planner = planner.addFmaxCageConstraints(0.05,[1,1,1],false); end
 
   % solves the problem
   t0 = tic();
