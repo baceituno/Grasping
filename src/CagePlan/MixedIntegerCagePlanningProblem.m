@@ -191,6 +191,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
           for j = 1:M
             Ai = sparse(2,obj.nv);
 
+            % for two pushers the graph must go in and out of the 
+            % C-space pushers
             if(obj.n_pushers > 2)
               bi = [1 - sum(G(j,:)); sum(G(j,:))];
             else
