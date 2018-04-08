@@ -119,7 +119,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % Defines the vertex multipliers
       % TODO: check if the size is correct
-      obj = obj.addVariable('lambda','C',[obj.n_pushers,obj.shape.nv], 0, inf);
+      obj = obj.addVariable('weight','C',[obj.n_pushers,obj.shape.nv], 0, inf);
 
       % Gets the G matrix
       G = object.shape.G;
@@ -155,13 +155,13 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(3:4,obj.vars.p.i(:,idx_2)) = eye(2);
 
             for k = 1:obj.shape.polygons(i).nv
-              Ai(1:2,obj.vars.lambda.i(n,obj.shape.polygons(i).iv+k)) = obj.shape.polygons(i).v(:,k);
-              Ai(3:4,obj.vars.lambda.i(n,obj.shape.polygons(i).iv+k)) = -obj.shape.polygons(i).v(:,k);           
+              Ai(1:2,obj.vars.weight.i(n,obj.shape.polygons(i).iv+k)) = obj.shape.polygons(i).v(:,k);
+              Ai(3:4,obj.vars.weight.i(n,obj.shape.polygons(i).iv+k)) = -obj.shape.polygons(i).v(:,k);           
             end
 
             for l = 1:obj.shape.polygons(j).nv
-              Ai(1:2,obj.vars.lambda.i(n,obj.shape.polygons(j).iv+l)) = -obj.shape.polygons(j).v(:,l);           
-              Ai(3:4,obj.vars.lambda.i(n,obj.shape.polygons(j).iv+l)) = obj.shape.polygons(j).v(:,l); 
+              Ai(1:2,obj.vars.weight.i(n,obj.shape.polygons(j).iv+l)) = -obj.shape.polygons(j).v(:,l);           
+              Ai(3:4,obj.vars.weight.i(n,obj.shape.polygons(j).iv+l)) = obj.shape.polygons(j).v(:,l); 
             end
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
@@ -173,10 +173,10 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Aeq(:,obj.vars.H.i(n,i,j)) = -1;
 
             range_1 = obj.shape.polygons(i).iv:(obj.shape.polygons(i).iv + obj.shape.polygons(i).nv);
-            Aeq(1,obj.vars.lambda.i(n,range_1)) = 1;
+            Aeq(1,obj.vars.weight.i(n,range_1)) = 1;
 
             range_2 = obj.shape.polygons(j).iv:(obj.shape.polygons(j).iv + obj.shape.polygons(j).nv);
-            Aeq(2,obj.vars.lambda.i(n,range_2)) = 1;
+            Aeq(2,obj.vars.weight.i(n,range_2)) = 1;
 
             obj = obj.addLinearConstraints([], [], Aeq, beq);
           end
@@ -246,15 +246,43 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % requires that F adds to an odd value
       Aeq = sparse(1,obj.nv);
       beq = 1;
-
       Aeq(1,obj.vars.c.i(end,end)) = 1;
-
       obj = obj.addLinearConstraints([], [], Aeq, beq);
+
+      % TODO: add MI intersection constraints
+      b = [0;1];
+      obj = obj.addVariable('beta','C',[obj.n_pushers,M], 0, inf);
+      obj = obj.addVariable('lambda','C',[obj.n_pushers,M], 0, 1);
     end
 
     function obj = addXORConstraint(obj,c,b1,b2)
-      % constrains that 
+      % constrains that c = b1 XOR b2 as:
+      % c <= b1 + b2
+      % c >= b1 - b2
+      % c >= b2 - b1
+      % c <= 2 - b2 - b1
+      % with c in [0,1]
 
+      Ai = sparse(4,obj.nv);
+      bi = [zeros(1,3), 2]';
+
+      Ai(1,b1) = -1;
+      Ai(1,b2) = -1;
+      Ai(1,c) = 1;
+
+      Ai(2,b1) = -1;
+      Ai(2,b2) = 1;
+      Ai(2,c) = -1;
+
+      Ai(3,b1) = 1;
+      Ai(3,b2) = -1;
+      Ai(3,c) = -1;
+
+      Ai(4,b1) = 1;
+      Ai(4,b2) = 1;
+      Ai(4,c) = 1;
+
+      obj = obj.addLinearConstraints(Ai, bi, [], []);      
     end
 
     function obj = addCostFunction(obj)
