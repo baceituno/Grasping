@@ -147,7 +147,7 @@ methods
 
 		% computes the score
 		Qw = diag([10;10;10;500;500;500]);
-		score = computeQ1LinFC(p,[0,0,0]',friction_cones,Qw);
+		score = computeQ1LinFC(p,[0,0,0]',friction_cones,Qw)
 
 		% inverts in order to fit the argmin formulation
 		score = -score;
