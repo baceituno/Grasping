@@ -116,6 +116,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % Defines the polygon interserction matrices
       M = length(obj.shape.polygons);
       obj = obj.addVariable('H','B',[obj.n_pushers,M,M], 0, 1);
+      obj = obj.addVariable('G','B',[obj.n_pushers,M,M], 0, 1);
 
       % Defines the vertex multipliers
       % TODO: check if the size is correct
@@ -124,6 +125,16 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % Gets the G matrix
       G = object.shape.G;
       assert(G == G');
+
+      % constrains the values of the G matrix
+      for i = 1:M
+        for j = 1:M
+          Ai = sparse(1,obj.nv);
+          bi = G(i,j);
+          Ai(1,obj.vars.G.i(i,j)) = 1;
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+        end
+      end
 
       % big-K value
       K = 10;
@@ -190,18 +201,22 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for i = 1:M
           for j = 1:M
             Ai = sparse(2,obj.nv);
+            bi = [0;1];
 
             % for two pushers the graph must go in and out of the 
             % C-space pushers
             if(obj.n_pushers > 2)
-              bi = [1 - sum(G(j,:)); sum(G(j,:))];
+              l_range = 1:M;
             else
-              bi = [1 - sum(G(j,[1:i-1,i+1:M])); sum(G(j,[1:i-1,i+1:M]))];
+              l_range = [1:i-1,i+1:M];
             end
 
-            Ai(1,H(idx_2,j,:)) = 1;
-            Ai(2,H(idx_2,j,:)) = -1;
-            Ai(2,H(idx_1,i,j)) = 1;
+            Ai(1,obj.vars.H.i(idx_2,j,l_range)) = -1;
+            Ai(1,obj.vars.G.i(idx_2,:)) = -1;
+            Ai(1,obj.vars.H.i(idx_1,i,j)) = 1;
+
+            Ai(2,obj.vars.H.i(idx_2,j,l_range)) = 1;
+            Ai(2,obj.vars.G.i(idx_2,:)) = 1;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -210,10 +225,16 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for p = 1:M
           for q = 1:M
             Ai = sparse(2,obj.nv);
-            bi = [1 - sum(G(q,[1:p-1,p+1:M])); sum(G(q,[1:p-1,p+1:M])) - G(p,q)];
+            bi = [1;0];
 
-            Ai(1,H(idx_2,j,:)) = 1;
-            Ai(2,H(idx_2,j,:)) = -1;
+            r_range = [1:p-1, p+1:M];
+
+            Ai(1,obj.vars.H.i(idx_2,q,:)) = 1;
+            Ai(1,obj.vars.G.i(idx_2,q,r_range)) = 1;
+
+            Ai(2,obj.vars.H.i(idx_2,q,:)) = -1;
+            Ai(2,obj.vars.G.i(idx_2,q,r_range)) = -1;
+            Ai(2,obj.vars.G.i(idx_2,p,q)) = 1;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end

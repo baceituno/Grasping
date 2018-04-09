@@ -3,4 +3,4 @@ cd ../..
 cd matlab
 gurobi_setup
 
-cd ~/Dropbox/Manipulation/
+cd ~/Dropbox\ \(MIT\)/Manipulation/
