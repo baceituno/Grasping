@@ -287,12 +287,13 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for i = 1:M
           for j = 1:M
             Ai = sparse(2,obj.nv);
-            bi = obj.shape.polygons(i).t(j) + [K;K];
+            bi = obj.shape.polygons(i).t(j) + 2*[K;K];
             Ai(:,obj.vars.lambda.i(n,i)) = -obj.shape.polygons(i).a(j);
             Ai(:,obj.vars.beta.i(n,i)) = -b;
             Ai(:,obj.vars.p.i(n,:)) = eye(2);
 
             Ai(:,obj.vars.G.i(n,i,j)) = K;
+            Ai(:,obj.vars.F.i(n,i)) = K;
 
             Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
             Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
@@ -300,12 +301,13 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
             Ai = sparse(2,obj.nv);
-            bi = -obj.shape.polygons(i).t(j) + [K;K];
+            bi = -obj.shape.polygons(i).t(j) + 2*[K;K];
             Ai(:,obj.vars.lambda.i(n,i)) = obj.shape.polygons(i).a(j);
             Ai(:,obj.vars.beta.i(n,i)) = b;
             Ai(:,obj.vars.p.i(n,:)) = -eye(2);
 
             Ai(:,obj.vars.G.i(n,i,j)) = K;
+            Ai(:,obj.vars.F.i(n,i)) = K;
 
             Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
             Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
