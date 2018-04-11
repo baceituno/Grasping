@@ -272,10 +272,50 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       Aeq(1,obj.vars.c.i(end,end)) = 1;
       obj = obj.addLinearConstraints([], [], Aeq, beq);
 
-      % TODO: add MI intersection constraints
+      % adds MI intersection constraints
       b = [0;1];
       obj = obj.addVariable('beta','C',[obj.n_pushers,M], 0, inf);
       obj = obj.addVariable('lambda','C',[obj.n_pushers,M], 0, 1);
+
+      % big K
+      K = 10;
+
+      % constrains when the polygon is not intersecting 
+      for n = 1:obj.n_pushers
+        idx_1 = n;
+        idx_2 = mod(n+1,obj.n_pushers);
+        for i = 1:M
+          for j = 1:M
+            Ai = sparse(2,obj.nv);
+            bi = obj.shape.polygons(i).t(j) + [K;K];
+            Ai(:,obj.vars.lambda.i(n,i)) = -obj.shape.polygons(i).a(j);
+            Ai(:,obj.vars.beta.i(n,i)) = -b;
+            Ai(:,obj.vars.p.i(n,:)) = eye(2);
+
+            Ai(:,obj.vars.G.i(n,i,j)) = K;
+
+            Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
+            Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            Ai = sparse(2,obj.nv);
+            bi = -obj.shape.polygons(i).t(j) + [K;K];
+            Ai(:,obj.vars.lambda.i(n,i)) = obj.shape.polygons(i).a(j);
+            Ai(:,obj.vars.beta.i(n,i)) = b;
+            Ai(:,obj.vars.p.i(n,:)) = -eye(2);
+
+            Ai(:,obj.vars.G.i(n,i,j)) = K;
+
+            Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
+            Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+          end
+        end
+      end
+
+      % TODO: constrains when the polygon is instersecting
     end
 
     function obj = addXORConstraint(obj,c,b1,b2)

@@ -3,6 +3,7 @@ classdef PlanarShape
 		polygons
 		regions
 		nv = 0
+		G
 	end
 
 	methods
