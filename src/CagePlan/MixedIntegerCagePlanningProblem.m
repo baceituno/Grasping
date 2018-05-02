@@ -12,6 +12,10 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % @param shape: structure with elements:
       %               - shape.polygons : a disjunctive set of convex polygons which union 
       %                                  results in the shape, represented by vertices
+      %                                  - shape.polygons{i}.nv = number of vertices of the poligon
+      %                                  - shape.polygons{i}.v = a 2xnv array with all the vertices
+      %                                  - shape.polygons{i}.iv = sum(shape.polygons(k).nv) from k = 1 to i-1
+      %                                  - shape.polygons{i}.center = center of the polygon      
       %               - shape.regions  : a set of convex regions that represent the complement 
       %                                  space of the shape
       %               - shape.nv       : Number of vertices in all the polygons of the shape
@@ -83,25 +87,22 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % regions assignment constraint
       for r = 1:nr
-        A = obj.shape.regions(r).A;
-        b = obj.shape.regions(r).b;
-        s = size(A, 1);
+        A = obj.shape.regions{r}.A;
+        b = obj.shape.regions{r}.b;
         % constrains for each finger
         for j = 1:obj.n_pushers
           Ai = sparse(size(A, 1), obj.nv);
           bi = zeros(size(A, 1), 1);
-
-          Ai(:, obj.vars.p.i(:,j)) = A;
+          Ai(:, obj.vars.p.i(1:2,j)) = A;
           Ai(:, obj.vars.region.i(r,j)) = M;
           bi(:) = b + M;
-          
           obj = obj.addLinearConstraints(Ai, bi, [], []);
         end
       end
       
       % assigns each pusher to one regions
-      Aeq = sparse(obj.n_pushers, obj.nv);
-      beq = zeros(obj.n_pushers, 1);
+      Aeq = sparse(obj.n_pushers,obj.nv);
+      beq = ones(obj.n_pushers,1);
       for j = 1:obj.n_pushers
         Aeq(j, obj.vars.region.i(:,j)) = 1;
       end
@@ -119,20 +120,17 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('G','B',[obj.n_pushers,M,M], 0, 1);
 
       % Defines the vertex multipliers
-      % TODO: check if the size is correct
-      obj = obj.addVariable('weight','C',[obj.n_pushers,obj.shape.nv], 0, inf);
-
-      % Gets the G matrix
-      G = object.shape.G;
-      assert(G == G');
+      obj = obj.addVariable('weight','C',[obj.n_pushers,2,obj.shape.nv], 0, 1);
 
       % constrains the values of the G matrix
-      for i = 1:M
-        for j = 1:M
-          Ai = sparse(1,obj.nv);
-          bi = G(i,j);
-          Ai(1,obj.vars.G.i(i,j)) = 1;
-          obj = obj.addLinearConstraints(Ai, bi, [], []);
+      for n = 1:obj.n_pushers
+        for i = 1:M
+          for j = 1:M
+            Ai = sparse(1,obj.nv);
+            bi = obj.shape.G(i,j);
+            Ai(1,obj.vars.G.i(n,i,j)) = 1;
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+          end
         end
       end
 
@@ -151,6 +149,9 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       for n = 1:obj.n_pushers
         idx_1 = n;
         idx_2 = mod(n+1,obj.n_pushers);
+        if(idx_2 == 0); idx_2 = obj.n_pushers; end;
+
+        % intersection constraint
         for i = 1:M
           for j = 1:M
             % intersection of the pushers
@@ -165,32 +166,34 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(3:4,obj.vars.p.i(:,idx_1)) = -eye(2);
             Ai(3:4,obj.vars.p.i(:,idx_2)) = eye(2);
 
-            for k = 1:obj.shape.polygons(i).nv
-              Ai(1:2,obj.vars.weight.i(n,obj.shape.polygons(i).iv+k)) = obj.shape.polygons(i).v(:,k);
-              Ai(3:4,obj.vars.weight.i(n,obj.shape.polygons(i).iv+k)) = -obj.shape.polygons(i).v(:,k);           
+            for k = 1:obj.shape.polygons{i}.nv
+              Ai(1:2,obj.vars.weight.i(idx_1,1,obj.shape.polygons{i}.iv+k)) = obj.shape.polygons{i}.v(:,k);
+              Ai(3:4,obj.vars.weight.i(idx_1,1,obj.shape.polygons{i}.iv+k)) = -obj.shape.polygons{i}.v(:,k);           
             end
 
-            for l = 1:obj.shape.polygons(j).nv
-              Ai(1:2,obj.vars.weight.i(n,obj.shape.polygons(j).iv+l)) = -obj.shape.polygons(j).v(:,l);           
-              Ai(3:4,obj.vars.weight.i(n,obj.shape.polygons(j).iv+l)) = obj.shape.polygons(j).v(:,l); 
+            for l = 1:obj.shape.polygons{j}.nv
+              Ai(1:2,obj.vars.weight.i(idx_1,2,obj.shape.polygons{j}.iv+l)) = -obj.shape.polygons{j}.v(:,l);           
+              Ai(3:4,obj.vars.weight.i(idx_1,2,obj.shape.polygons{j}.iv+l)) = obj.shape.polygons{j}.v(:,l); 
             end
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-            % sum of the weights
-            Aeq = sparse(2,obj.nv);
-            beq = zeros(2,1);
-
-            Aeq(:,obj.vars.H.i(n,i,j)) = -1;
-
-            range_1 = obj.shape.polygons(i).iv:(obj.shape.polygons(i).iv + obj.shape.polygons(i).nv);
-            Aeq(1,obj.vars.weight.i(n,range_1)) = 1;
-
-            range_2 = obj.shape.polygons(j).iv:(obj.shape.polygons(j).iv + obj.shape.polygons(j).nv);
-            Aeq(2,obj.vars.weight.i(n,range_2)) = 1;
-
-            obj = obj.addLinearConstraints([], [], Aeq, beq);
           end
+        end
+
+        % weights must add to 1 if intersecting, 0 otherwise
+        for i = 1:M
+          Aeq = sparse(2,obj.nv);
+          beq = zeros(2,1);
+
+          range_1 = (obj.shape.polygons{i}.iv+1):(obj.shape.polygons{i}.iv + obj.shape.polygons{i}.nv);
+
+          Aeq(1,obj.vars.H.i(idx_1,i,:)) = -1;
+          Aeq(1,obj.vars.weight.i(idx_1,1,range_1)) = 1;
+
+          Aeq(2,obj.vars.H.i(idx_1,:,i)) = -1;
+          Aeq(2,obj.vars.weight.i(idx_1,2,range_1)) = 1;
+          
+          obj = obj.addLinearConstraints([], [], Aeq, beq);
         end 
       end
 
@@ -198,10 +201,12 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       for n = 1:obj.n_pushers
         idx_1 = n;
         idx_2 = mod(n+1,obj.n_pushers);
+        if(idx_2 == 0); idx_2 = obj.n_pushers; end;
+
         for i = 1:M
           for j = 1:M
             Ai = sparse(2,obj.nv);
-            bi = [0;1];
+            bi = [K-1,K+1]';
 
             % for two pushers the graph must go in and out of the 
             % C-space pushers
@@ -211,12 +216,13 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
               l_range = [1:i-1,i+1:M];
             end
 
+
             Ai(1,obj.vars.H.i(idx_2,j,l_range)) = -1;
-            Ai(1,obj.vars.G.i(idx_2,:)) = -1;
-            Ai(1,obj.vars.H.i(idx_1,i,j)) = 1;
+            Ai(1,obj.vars.G.i(idx_2,j,:)) = -1;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
 
             Ai(2,obj.vars.H.i(idx_2,j,l_range)) = 1;
-            Ai(2,obj.vars.G.i(idx_2,:)) = 1;
+            Ai(2,obj.vars.G.i(idx_2,j,:)) = 1;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -225,17 +231,16 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for p = 1:M
           for q = 1:M
             Ai = sparse(2,obj.nv);
-            bi = [1;0];
+            bi = [K+1,K-1]';
 
-            r_range = [1:p-1, p+1:M];
+            r_range = [1:p-1,p+1:M];
 
             Ai(1,obj.vars.H.i(idx_2,q,:)) = 1;
             Ai(1,obj.vars.G.i(idx_2,q,r_range)) = 1;
 
             Ai(2,obj.vars.H.i(idx_2,q,:)) = -1;
             Ai(2,obj.vars.G.i(idx_2,q,r_range)) = -1;
-            Ai(2,obj.vars.G.i(idx_2,p,q)) = 1;
-
+            Ai(:,obj.vars.G.i(idx_2,p,q)) = K;
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
         end
@@ -248,21 +253,62 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % Defines the polygon interserction matrices
       M = length(obj.shape.polygons);
-      obj = obj.addVariable('F','B',[obj.n_pushers,M], 0, 1);
+      obj = obj.addVariable('F','B',[obj.n_pushers,M,6], 0, 1);
       
-      % Defins teh XOR slack variable
-      obj = obj.addVariable('c','C',[obj.n_pushers,M-1], 0, 1);
+      % Defins the XOR slack variable
+      obj = obj.addVariable('c','C',[obj.n_pushers*M-1,1], 0, 1);
+
+      % adds MI intersection constraints
+      obj = obj.addVariable('beta','C',[obj.n_pushers,M], 0, inf);
+      obj = obj.addVariable('lambda','C',[obj.n_pushers,M], 0, 1);
       
-      % performs the XOR sequentially
-      obj = obj.addXORConstraint(obj.vars.c.i(1,1),obj.vars.F.i(1,1),obj.vars.F.i(1,2));
-      k = 1;
-      l = 1;
+      % big K
+      K = 10;
 
       for i = 1:obj.n_pushers
-        for j = 1:M-1
-          obj = obj.addXORConstraint(obj.vars.c.i(i,j),obj.vars.c.i(k,l),obj.vars.F.i(i,j+1));
-          k = i;
-          l = j;
+        idx_1 = i;
+        idx_2 = mod(i+1,obj.n_pushers);
+        if(idx_2 == 0); idx_2 = obj.n_pushers; end
+        for j = 1:M
+          % requires that each F adds to one
+          Aeq = sparse(1,obj.nv);
+          beq = 1;
+          Aeq(1,obj.vars.F.i(i,j,[1:4,6])) = 1;
+          obj = obj.addLinearConstraints([], [], Aeq, beq);
+
+          Ai = sparse(1,obj.nv);
+          bi = 0;
+          Ai(1,obj.vars.F.i(i,j,1:4)) = 1;
+          Ai(1,obj.vars.H.i(i,j,:)) = -1;
+          Ai(1,obj.vars.G.i(i,j,:)) = -1;
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+          Aeq = sparse(1,obj.nv);
+          beq = 1;
+          Aeq(1,obj.vars.F.i(i,j,6)) = 1;
+          Aeq(1,obj.vars.H.i(i,j,:)) = 1;
+          Aeq(1,obj.vars.G.i(i,j,:)) = 1;
+          obj = obj.addLinearConstraints([], [], Aeq, beq);
+        end
+      end
+
+      % performs XOR sequentially
+      n = 1;
+
+      for i = 1:obj.n_pushers
+        for j = 1:M
+          if j == 1 && i == 1
+            obj = obj.addXORConstraint(obj.vars.c.i(1,1),obj.vars.F.i(1,1,1),obj.vars.F.i(1,2,1));
+          else 
+            if j < M
+              obj = obj.addXORConstraint(obj.vars.c.i(n),obj.vars.c.i(n-1,1),obj.vars.F.i(i,j+1,1));
+            else
+              if i < obj.n_pushers
+                obj = obj.addXORConstraint(obj.vars.c.i(n),obj.vars.c.i(n-1,1),obj.vars.F.i(i+1,1,1));
+              end
+            end
+          end
+          n = n + 1;
         end
       end
 
@@ -272,52 +318,150 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       Aeq(1,obj.vars.c.i(end,end)) = 1;
       obj = obj.addLinearConstraints([], [], Aeq, beq);
 
-      % adds MI intersection constraints
-      b = [0;1];
-      obj = obj.addVariable('beta','C',[obj.n_pushers,M], 0, inf);
-      obj = obj.addVariable('lambda','C',[obj.n_pushers,M], 0, 1);
-
-      % big K
-      K = 10;
-
-      % constrains when the polygon is not intersecting 
       for n = 1:obj.n_pushers
         idx_1 = n;
         idx_2 = mod(n+1,obj.n_pushers);
+        if(idx_2 == 0); idx_2 = obj.n_pushers; end
         for i = 1:M
           for j = 1:M
+            % adds the constraint when the 
+            % polygon is not intersecting
+            Ai = sparse(4,obj.nv);
+            bi = 2*K*ones(4,1);
+
+            Ai(1:2,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(3:4,obj.vars.p.i(1,idx_1)) = [1;-1];
+            Ai(:,obj.vars.G.i(idx_1,i,j)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
+            if obj.shape.polygons{i}.center(1) > obj.shape.polygons{j}.center(1)
+              bi(3,1) = bi(3,1) - obj.shape.polygons{j}.center(1);
+              bi(4,1) = bi(4,1) + obj.shape.polygons{i}.center(1);
+            else 
+              bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1);
+              bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1);
+            end
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+            
+            % if the ray passes above the segment
             Ai = sparse(2,obj.nv);
-            bi = obj.shape.polygons(i).t(j) + 2*[K;K];
-            Ai(:,obj.vars.lambda.i(n,i)) = -obj.shape.polygons(i).a(j);
-            Ai(:,obj.vars.beta.i(n,i)) = -b;
-            Ai(:,obj.vars.p.i(n,:)) = eye(2);
+            bi = 2*K*ones(2,1);
 
-            Ai(:,obj.vars.G.i(n,i,j)) = K;
-            Ai(:,obj.vars.F.i(n,i)) = K;
-
-            Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
-            Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
+            Ai(1:2,obj.vars.p.i(2,idx_1)) = 1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,2)) = K;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) + 0.01;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) + 0.01;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
+            % if the ray passes to the right of the segment
             Ai = sparse(2,obj.nv);
-            bi = -obj.shape.polygons(i).t(j) + 2*[K;K];
-            Ai(:,obj.vars.lambda.i(n,i)) = obj.shape.polygons(i).a(j);
-            Ai(:,obj.vars.beta.i(n,i)) = b;
-            Ai(:,obj.vars.p.i(n,:)) = -eye(2);
+            bi = 2*K*ones(2,1);
 
-            Ai(:,obj.vars.G.i(n,i,j)) = K;
-            Ai(:,obj.vars.F.i(n,i)) = K;
+            Ai(1,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,3)) = K;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - 0.01;
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - 0.01;
 
-            Ai(:,obj.vars.H.i(idx_1,:,i)) = -K;
-            Ai(:,obj.vars.H.i(idx_2,i,:)) = -K;
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the left of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(2,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,4)) = K;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) + 0.01;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) + 0.01;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % adds the constraint constrains when the 
+            % polygon is intersecting with other pusher
+            
+            % the ray intersects the object
+            Ai = sparse(4,obj.nv);
+            bi = 3*K*ones(4,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(3,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(4,obj.vars.p.i(1,idx_2)) = -1;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,5)) = K;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
+            bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1);
+            bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1);
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            Ai = sparse(4,obj.nv);
+            bi = 2*K*ones(4,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(3,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(4,obj.vars.p.i(1,idx_2)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,5)) = -K;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
+            bi(3,1) = bi(3,1) + obj.shape.polygons{i}.center(1);
+            bi(4,1) = bi(4,1) - obj.shape.polygons{j}.center(1);
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+ 
+            % the ray passes above the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = 1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,2)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) + 0.01;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) + 0.01;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the right of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(:,obj.vars.F.i(idx_1,i,3)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - 0.01;
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - 0.01;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the left of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = 1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,4)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) + 0.01;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) + 0.01;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
         end
       end
-
-      % TODO: constrains when the polygon is instersecting
     end
 
     function obj = addXORConstraint(obj,c,b1,b2)
