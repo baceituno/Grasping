@@ -4,6 +4,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
   properties
     n_pushers
     shape
+    r = 0.1 % min pusher separation
   end
 
   methods
@@ -107,6 +108,38 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         Aeq(j, obj.vars.region.i(:,j)) = 1;
       end
       obj = obj.addLinearConstraints([], [], Aeq, beq);
+
+      % ensures that the pushers keep a minimum separation
+      % obj = obj.addVariable('d', 'B', [2, obj.n_pushers], 0, 1);
+
+      % for n = 1:obj.n_pushers
+      %   idx_1 = n;
+      %   idx_2 = mod(n+1,obj.n_pushers);
+      %   if(idx_2 == 0); idx_2 = obj.n_pushers; end;
+
+      %   Ai = sparse(4,obj.nv);
+      %   bi = -obj.r + [0,M,M,2*M]';
+        
+      %   Ai(1,obj.vars.d.i(:,idx_1)) = -M;
+      %   Ai(1,obj.vars.p.i(:,idx_1)) = [1,1];
+      %   Ai(1,obj.vars.p.i(:,idx_2)) = [-1,-1];
+
+      %   Ai(2,obj.vars.d.i(1,idx_1)) = -M;
+      %   Ai(2,obj.vars.d.i(1,idx_1)) = M;
+      %   Ai(2,obj.vars.p.i(:,idx_1)) = [-1,1];
+      %   Ai(2,obj.vars.p.i(:,idx_2)) = [1,-1];
+        
+      %   Ai(3,obj.vars.d.i(2,idx_1)) = -M;
+      %   Ai(3,obj.vars.d.i(2,idx_1)) = M;
+      %   Ai(3,obj.vars.p.i(:,idx_1)) = [1,-1];
+      %   Ai(3,obj.vars.p.i(:,idx_2)) = [-1,1];
+
+      %   Ai(4,obj.vars.d.i(:,idx_1)) = M;
+      %   Ai(4,obj.vars.p.i(:,idx_1)) = [-1,-1];
+      %   Ai(4,obj.vars.p.i(:,idx_2)) = [1,1];
+        
+      %   obj = obj.addLinearConstraints(Ai, bi, [], []);
+      % end
     end
 
     function obj = addCircleConstraint(obj)
@@ -206,7 +239,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for i = 1:M
           for j = 1:M
             Ai = sparse(2,obj.nv);
-            bi = [K-1,K+1]';
+            bi = [K+1,K-1]';
 
             % for two pushers the graph must go in and out of the 
             % C-space pushers
@@ -216,13 +249,12 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
               l_range = [1:i-1,i+1:M];
             end
 
+            Ai(1,obj.vars.H.i(idx_2,j,l_range)) = 1;
+            Ai(1,obj.vars.G.i(idx_2,j,:)) = 1;
 
-            Ai(1,obj.vars.H.i(idx_2,j,l_range)) = -1;
-            Ai(1,obj.vars.G.i(idx_2,j,:)) = -1;
+            Ai(2,obj.vars.H.i(idx_2,j,l_range)) = -1;
+            Ai(2,obj.vars.G.i(idx_2,j,:)) = -1;
             Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
-
-            Ai(2,obj.vars.H.i(idx_2,j,l_range)) = 1;
-            Ai(2,obj.vars.G.i(idx_2,j,:)) = 1;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -241,6 +273,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(2,obj.vars.H.i(idx_2,q,:)) = -1;
             Ai(2,obj.vars.G.i(idx_2,q,r_range)) = -1;
             Ai(:,obj.vars.G.i(idx_2,p,q)) = K;
+
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
         end
@@ -318,6 +351,9 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
       Aeq(1,obj.vars.c.i(end,end)) = 1;
       obj = obj.addLinearConstraints([], [], Aeq, beq);
 
+      % small difference to avoid including edges
+      dx = 0.01;
+
       for n = 1:obj.n_pushers
         idx_1 = n;
         idx_2 = mod(n+1,obj.n_pushers);
@@ -336,11 +372,11 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
             bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
             if obj.shape.polygons{i}.center(1) > obj.shape.polygons{j}.center(1)
-              bi(3,1) = bi(3,1) - obj.shape.polygons{j}.center(1);
-              bi(4,1) = bi(4,1) + obj.shape.polygons{i}.center(1);
+              bi(3,1) = bi(3,1) - obj.shape.polygons{j}.center(1) - dx;
+              bi(4,1) = bi(4,1) + obj.shape.polygons{i}.center(1) - dx;
             else 
-              bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1);
-              bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1);
+              bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1) - dx;
+              bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1) - dx;
             end
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
@@ -352,8 +388,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(1:2,obj.vars.p.i(2,idx_1)) = 1;
             Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
             Ai(1:2,obj.vars.F.i(idx_1,i,2)) = K;
-            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) + 0.01;
-            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) + 0.01;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) - dx;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -365,8 +401,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(2,obj.vars.p.i(1,idx_1)) = -1;
             Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
             Ai(1:2,obj.vars.F.i(idx_1,i,3)) = K;
-            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - 0.01;
-            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - 0.01;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - dx;
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -378,15 +414,15 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(2,obj.vars.p.i(1,idx_1)) = 1;
             Ai(1:2,obj.vars.G.i(idx_1,i,j)) = K;
             Ai(1:2,obj.vars.F.i(idx_1,i,4)) = K;
-            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) + 0.01;
-            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) + 0.01;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) - dx;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
             % adds the constraint constrains when the 
             % polygon is intersecting with other pusher
             
-            % the ray intersects the object
+            % the ray intersects the segment
             Ai = sparse(4,obj.nv);
             bi = 3*K*ones(4,1);
 
@@ -399,8 +435,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(:,obj.vars.F.i(idx_1,i,5)) = K;
             bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
             bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
-            bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1);
-            bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1);
+            bi(3,1) = bi(3,1) - obj.shape.polygons{i}.center(1) - dx;
+            bi(4,1) = bi(4,1) + obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -416,8 +452,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(:,obj.vars.F.i(idx_1,i,5)) = -K;
             bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(2);
             bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(2);
-            bi(3,1) = bi(3,1) + obj.shape.polygons{i}.center(1);
-            bi(4,1) = bi(4,1) - obj.shape.polygons{j}.center(1);
+            bi(3,1) = bi(3,1) + obj.shape.polygons{i}.center(1) - dx;
+            bi(4,1) = bi(4,1) - obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
  
@@ -429,8 +465,8 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(2,obj.vars.p.i(2,idx_2)) = 1;
             Ai(:,obj.vars.F.i(idx_1,i,2)) = K;
             Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
-            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) + 0.01;
-            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) + 0.01;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(2) - dx;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(2) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -438,12 +474,12 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai = sparse(2,obj.nv);
             bi = 2*K*ones(2,1);
 
-            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
-            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(1,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(1,idx_2)) = -1;
             Ai(:,obj.vars.F.i(idx_1,i,3)) = K;
             Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
-            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - 0.01;
-            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - 0.01;
+            bi(1,1) = bi(1,1) + obj.shape.polygons{i}.center(1) - dx;
+            bi(2,1) = bi(2,1) + obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -451,12 +487,12 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai = sparse(2,obj.nv);
             bi = 2*K*ones(2,1);
 
-            Ai(1,obj.vars.p.i(2,idx_1)) = 1;
-            Ai(2,obj.vars.p.i(2,idx_2)) = 1;
+            Ai(1,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(2,obj.vars.p.i(1,idx_2)) = 1;
             Ai(:,obj.vars.F.i(idx_1,i,4)) = K;
             Ai(:,obj.vars.H.i(idx_1,i,j)) = K;
-            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) + 0.01;
-            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) + 0.01;
+            bi(1,1) = bi(1,1) - obj.shape.polygons{i}.center(1) - dx;
+            bi(2,1) = bi(2,1) - obj.shape.polygons{j}.center(1) - dx;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -495,8 +531,15 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
     end
 
     function obj = addCostFunction(obj)
-      % Minimizes a cost function defined by the user
-      % TODO:
+      % Minimizes the separation between pushers
+      for j = 1:obj.n_pushers-1
+        Qi = sparse(obj.nv,obj.nv);
+        Qi(obj.vars.p.i(:,j),obj.vars.p.i(:,j)) = eye(2);
+        Qi(obj.vars.p.i(1,j),obj.vars.p.i(1,j+1)) = -2;
+        Qi(obj.vars.p.i(2,j),obj.vars.p.i(2,j+1)) = -2;
+        Qi(obj.vars.p.i(:,j+1),obj.vars.p.i(:,j+1)) = eye(2);
+        obj = obj.addCost(Qi,[],[]);
+      end      
     end
     % end of methods
   end

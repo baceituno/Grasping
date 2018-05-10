@@ -9,7 +9,7 @@ display('Clearing workspace')
 clc; clear all; close all;
 
 % reads the 2 triange shape
-p = PlanarShape('Poly2');
+p = PlanarShape('Poly3');
 
 % sets-up the optimization for 2 fingers
 planner = MixedIntegerCagePlanningProblem(p,2);
@@ -23,7 +23,11 @@ planner = planner.addCircleConstraint();
 % adds the enclosing constraints
 planner = planner.addEnclosingConstraint();
 
+% adds the cost function
+planner = planner.addCostFunction();
+
 % solves the optimization
+disp('solving...');
 planner = planner.solve();
 
 display('results')
