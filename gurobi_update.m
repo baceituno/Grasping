@@ -1,4 +1,4 @@
-cd /Library/gurobi751/mac64/examples/matlab
+cd /Library/gurobi800/mac64/examples/matlab
 cd ../..
 cd matlab
 gurobi_setup

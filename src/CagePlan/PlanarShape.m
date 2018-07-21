@@ -2,6 +2,7 @@ classdef PlanarShape
 	properties
 		polygons
 		regions
+		lines
 		nv = 0
 		G
 	end
@@ -64,6 +65,86 @@ classdef PlanarShape
 				for j = 1:m
 					obj.G(i,j) = fscanf(fid,'%d',1);
 				end
+			end
+
+			% reads the line segments and determines the complementarity
+			nl = fscanf(fid,'%d',1);
+			obj.lines = cell(nl);
+
+			for i = 1:nl
+				obj.lines{i} = struct('v1', [], 'v2', [], 'opp', [], 'non_cod', [], 'angle', [], 'isCV', false);
+				obj.lines{i}.v1 = [fscanf(fid,'%d',1);fscanf(fid,'%d',1)];
+				obj.lines{i}.v2 = [fscanf(fid,'%d',1);fscanf(fid,'%d',1)];
+
+				% computes the angle of the segment, given that the vertexes are counted counterclockwise
+				dy = abs(obj.lines{i}.v2(2)-obj.lines{i}.v1(2));
+				dx = abs(obj.lines{i}.v2(1)-obj.lines{i}.v1(1));
+
+				if obj.lines{i}.v2(2) > obj.lines{i}.v1(2)
+					if obj.lines{i}.v2(1) > obj.lines{i}.v1(1)
+						obj.lines{i}.angle = -atan(dy/dx);
+					else
+						obj.lines{i}.angle = atan(dy/dx);
+					end
+				else if obj.lines{i}.v2(2) == obj.lines{i}.v1(2)
+					if obj.lines{i}.v2(1) > obj.lines{i}.v1(1)
+						obj.lines{i}.angle = -pi/2;
+					else
+						obj.lines{i}.angle = pi/2;
+					end
+				else
+					if obj.lines{i}.v2(1) > obj.lines{i}.v1(1)
+						obj.lines{i}.angle = atan(dy/dx)-pi;
+					else
+						obj.lines{i}.angle = atan(dy/dx)+pi/2;
+					end
+				end
+
+				% checks if the segment is a concave vertex
+				if dx == 0 && dy == 0
+					obj.lines{i}.isCV = true;
+					obj.lines{i}.angle = 0;
+				end
+			end
+
+			% determines the propierties of the faces
+			for i = 1:nl
+				% opposition of the faces
+				opposite = [];
+
+				if obj.lines{j}.isCV
+					opposite = 1:nl;
+				else
+					for j = 1:nl
+						if obj.lines{j}.isCV && j ~= i
+							opposite = [opposite, j];
+						end
+						if abs(obj.lines{i}.angle - obj.lines{j}.angle) == pi
+							opposite = [opposite, j];
+						end
+					end
+				end
+
+				obj.lines{i}.opp = opposite;
+
+				% co-directionaly of the faces
+				noncod = [];
+
+				if obj.lines{j}.isCV
+					noncod = 1:nl;
+				else
+					for j = 1:nl
+						if obj.lines{j}.isCV && j ~= i
+							noncod = [noncod, j];
+						end
+						dif_angs = abs(obj.lines{i}.angle - obj.lines{j}.angle);
+						if dif_angs > 0;
+							noncod = [opposite, j];
+						end
+					end
+				end
+
+				obj.lines{i}.non_cod = non_cod;
 			end
 		end
 	end

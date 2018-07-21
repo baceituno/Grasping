@@ -12,7 +12,7 @@ clc; clear all; close all;
 p = PlanarShape('Poly3');
 
 % sets-up the optimization for 2 fingers
-planner = MixedIntegerCagePlanningProblem(p,2);
+planner = MixedIntegerCagePlanningProblem(p,3);
 
 % adds the convex region constraints
 planner = planner.addNoCollisionConstraint();
