@@ -6,6 +6,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
     shape
     r = 0.1 % min pusher separation
     n_samples
+    d_theta
   end
 
   methods
@@ -25,7 +26,12 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % @param n_pushers: number of fingers of the gripper
 
       assert(nargin > 0);
-      assert(mod(n_samples,2) ~= 0);
+
+      if(mod(n_samples,2) == 0)
+        n_samples = n_samples + 1;
+        display('number of samples must be odd, correcting...')
+      end
+
       if nargin < 2; n_pushers = 3; end
 
       % sets up the optimization
@@ -53,21 +59,30 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
         Ai = sparse(1,obj.nv);
         bi = zeros(1,1);
 
-        % Th_i < Th_i+1
-        Ai(1,obj.vars.Th.i(1,i)) = 1;
-        Ai(1,obj.vars.Th.i(1,i+1)) = -1;
+        % Th_i+1 < Th_i
+        Ai(1,obj.vars.Th.i(1,i)) = -1;
+        Ai(1,obj.vars.Th.i(1,i+1)) = 1;
 
         obj = obj.addLinearConstraints(Ai, bi, [], []);
       end
 
+      % must be caged at k = 0
+      Aeq = sparse(1,obj.nv);
+      beq = zeros(1,1);
+
+      % Th_(ns+1)/2 = 0
+      Aeq(1,obj.vars.Th.i(1,(obj.n_samples+1)/2)) = 1;
+
+      obj = obj.addLinearConstraints([],[],Aeq,beq);
+
       % for each slice with positive orientation
-      for i = (obj.n_samples+1)/2:obj.n_samples
+      for i = (obj.n_samples+3)/2:obj.n_samples
         Ai = sparse(1,obj.nv);
         bi = zeros(1,1);
 
-        % Th_i-1 < Th_i
-        Ai(1,obj.vars.Th.i(1,i-1)) = -1;
-        Ai(1,obj.vars.Th.i(1,i)) = 1;
+        % Th_i-1 > Th_i
+        Ai(1,obj.vars.Th.i(1,i-1)) = 1;
+        Ai(1,obj.vars.Th.i(1,i)) = -1;
 
         obj = obj.addLinearConstraints(Ai, bi, [], []);
       end
@@ -132,19 +147,19 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai = sparse(4, obj.nv);
             bi = K*ones(4, 1);
 
-            Ai(1:2,obj.vars.p.(:,i)) = eye(2);
-            Ai(1:2,obj.vars.p_ref.(:,s)) = eye(2);
+            Ai(1:2,obj.vars.p.i(:,i)) = eye(2);
+            Ai(1:2,obj.vars.p_ref.i(:,s)) = eye(2);
 
-            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = -obj.shape.lines{l}.v1;
-            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = obj.shape.lines{l}.v2;
-            bi(1:2) = bi(1:2) + obj.shape.lines{l}.v2;
+            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = -obj.Rotate(s)*obj.shape.lines{l}.v1;
+            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = obj.Rotate(s)*obj.shape.lines{l}.v2;
+            bi(1:2) = bi(1:2) + obj.Rotate(s)*obj.shape.lines{l}.v2;
 
-            Ai(3:4,obj.vars.p.(:,i)) = -eye(2);
-            Ai(3:4,obj.vars.p_ref.(:,s)) = -eye(2);
+            Ai(3:4,obj.vars.p.i(:,i)) = -eye(2);
+            Ai(3:4,obj.vars.p_ref.i(:,s)) = -eye(2);
 
-            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = obj.shape.lines{l}.v1;
-            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = -obj.shape.lines{l}.v2;
-            bi(3:4) = bi(3:4) - obj.shape.lines{l}.v2; 
+            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = obj.Rotate(s)*obj.shape.lines{l}.v1;
+            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = -obj.Rotate(s)*obj.shape.lines{l}.v2;
+            bi(3:4) = bi(3:4) - obj.Rotate(s)*obj.shape.lines{l}.v2; 
             
             Ai(:,obj.vars.line.i(l,i,s)) = K;
 
@@ -154,20 +169,19 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       end
 
       % depending on the number of fingers determines what is a critical orientation
-      if n_pushers == 2
+      if obj.n_pushers == 2
         for s = 1:obj.n_samples
           % both fingers must be in contact to have a critical orientation
-          Ai = sparse(2, obj.nv);
-          bi = zeros(2, 1);
+          Ai = sparse(1, obj.nv);
+          bi = zeros(1, 1);
 
-          Ai(:,obj.vars.Th.(1,s)) = 1;
+          Ai(1,obj.vars.Th.i(1,s)) = 1;
           if s < (obj.n_samples + 1)/2
-            Ai(:,obj.vars.Th.(1,s+1)) = -1;
+            Ai(1,obj.vars.Th.i(1,s+1)) = -1;
           else 
-            Ai(:,obj.vars.Th.(1,s-1)) = -1;
+            Ai(1,obj.vars.Th.i(1,s-1)) = -1;
           end
-          Ai(1,obj.vars.line.i(:,1,s)) = -1;
-          Ai(2,obj.vars.line.i(:,2,s)) = -1;
+          Ai(1,obj.vars.line.i(:,:,s)) = -1;
 
           obj = obj.addLinearConstraints(Ai, bi, [], []);   
 
@@ -199,10 +213,25 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           Ai(1,obj.vars.crit_type.i(:,s)) = -1;
 
           if s < (obj.n_samples + 1)/2
-            Ai(1,obj.vars.Th.(1,s+1)) = -1;
-          else 
-            Ai(1,obj.vars.Th.(1,s-1)) = -1;
+            Ai(1,obj.vars.Th.i(1,s+1)) = -1;
+          elseif s > (obj.n_samples + 1)/2
+            Ai(1,obj.vars.Th.i(1,s-1)) = -1;
           end
+
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+          Ai = sparse(1, obj.nv);
+          bi = ones(1,1);          
+
+          Ai(1,obj.vars.crit_type.i(:,s)) = 1;
+
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+          Ai = sparse(1, obj.nv);
+          bi = zeros(1,1);          
+
+          Ai(1,obj.vars.crit_type.i(:,s)) = 1;
+          Ai(1,obj.vars.line.i(:,:,s)) = -1;
 
           obj = obj.addLinearConstraints(Ai, bi, [], []);
 
@@ -210,7 +239,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           % only contact with opposite faces counts
           for i = 1:obj.n_pushers
             idx_1 = i;
-            idx_comp = [1:idx_1-1,idx+1:obj.n_pushers];
+            idx_comp = [1:idx_1-1,idx_1+1:obj.n_pushers];
 
             for l = 1:nl
               Ai = sparse(1, obj.nv);
@@ -244,10 +273,15 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       end
     end
 
-    function rotation = Rotate(obj,sample)
+    function rotation = Rotate(obj,sample,inverse)
+      if nargin < 3; inverse = 0; end;
+
       % determines the rotation matrix for the sample
-      ang = -pi + 2*pi*(sample-1)/obj.n_samples;
-      Rotate = [cos(ang), -sin(ang); sin(ang), cos(ang)];
+      ang = -pi/2 + pi*(sample-1)/(obj.n_samples-1);
+
+      if inverse; ang = -ang; end;
+
+      rotation = [cos(ang), -sin(ang); sin(ang), cos(ang)];
     end
 
     function obj = addNoCollisionConstraint(obj)
@@ -305,8 +339,8 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           for j = 1:obj.n_pushers
             Ai = sparse(size(A, 1), obj.nv);
             bi = zeros(size(A, 1), 1);
-            Ai(:, obj.vars.p.i(1:2,j)) = A;
-            Ai(:, obj.vars.p_ref.i(1:2,i)) = A;
+            Ai(:, obj.vars.p.i(1:2,j)) = A*inv(obj.Rotate(i));
+            Ai(:, obj.vars.p_ref.i(1:2,i)) = A*inv(obj.Rotate(i));
             Ai(:, obj.vars.region.i(r,j,i)) = M;
             bi(:) = b + M;
             obj = obj.addLinearConstraints(Ai, bi, [], []);
@@ -314,7 +348,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
         end
       end
 
-      % assigns each pusher to one region when Th = 1 (sos1 constraint)
+      % assigns each pusher to one region when Th = 0 (sos1 constraint)
       for i = 1:obj.n_samples
         Ai = sparse(2*obj.n_pushers,obj.nv);
         bi = ones(2*obj.n_pushers,1);
@@ -327,7 +361,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           Ai(2*j, obj.vars.Th.i(1,i)) = -M;
           bi(2*j,1) = -1;
         end
-        obj = obj.addLinearConstraints([], [], Aeq, beq);
+        obj = obj.addLinearConstraints(Ai, bi, [], []);
       end
     end
 
@@ -366,9 +400,9 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
         for n = 1:obj.n_pushers
           Ai = sparse(2,obj.nv);
           bi = [1;-1];
-          Aeq(1,obj.vars.H.i(n,:,:,s)) = 1;
-          Aeq(-1,obj.vars.H.i(n,:,:,s)) = -1;
-          Aeq(:,obj.vars.Th.i(1,s)) = -K;
+          Ai(1,obj.vars.H.i(n,:,:,s)) = 1;
+          Ai(2,obj.vars.H.i(n,:,:,s)) = -1;
+          Ai(:,obj.vars.Th.i(1,s)) = -K;
           obj = obj.addLinearConstraints(Ai, bi, [], []);
         end
       end
@@ -490,6 +524,9 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % number of polygons
       M = length(obj.shape.polygons);
 
+      delta = pi/(2*obj.n_samples-2);
+      obj.d_theta = delta*180/pi;
+
       % big-K number
       K = 100;
 
@@ -566,9 +603,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           end
         end
       end
-
     end
-    
 
     function obj = addEnclosingConstraint(obj)
       % constrains the origin to lie inside the circle formed by the 
@@ -576,17 +611,19 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % Defines the polygon interserction matrices
       M = length(obj.shape.polygons);
-      obj = obj.addVariable('F','B',[obj.n_pushers,M,6,obj.n_samples], 0, 1);
+      obj = obj.addVariable('F','B',[obj.n_pushers,M,6], 0, 1);
       
       % Defins the XOR slack variable
-      obj = obj.addVariable('c','C',[obj.n_pushers*M-1,1,obj.n_samples], 0, 1);
+      obj = obj.addVariable('c','C',[obj.n_pushers*M-1,1], 0, 1);
 
       % adds MI intersection constraints
-      obj = obj.addVariable('beta','C',[obj.n_pushers,M,obj.n_samples], 0, inf);
-      obj = obj.addVariable('lambda','C',[obj.n_pushers,M,obj.n_samples], 0, 1);
+      obj = obj.addVariable('beta','C',[obj.n_pushers,M], 0, inf);
+      obj = obj.addVariable('lambda','C',[obj.n_pushers,M], 0, 1);
       
       % big K
       K = 10;
+
+      idx = (obj.n_samples + 1)/2;
 
       for s = 1:obj.n_samples
         for i = 1:obj.n_pushers
@@ -597,223 +634,220 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
             % requires that each F adds to one
             Aeq = sparse(1,obj.nv);
             beq = 1;
-            Aeq(1,obj.vars.F.i(i,j,[1:4,6],s)) = 1;
+            Aeq(1,obj.vars.F.i(i,j,[1:4,6])) = 1;
             obj = obj.addLinearConstraints([], [], Aeq, beq);
 
             Ai = sparse(1,obj.nv);
             bi = 0;
-            Ai(1,obj.vars.F.i(i,j,1:4,s)) = 1;
-            Ai(1,obj.vars.H.i(i,j,:,s)) = -1;
-            Ai(1,obj.vars.G.i(i,j,:,s)) = -1;
+            Ai(1,obj.vars.F.i(i,j,1:4)) = 1;
+            Ai(1,obj.vars.H.i(i,j,:,idx)) = -1;
+            Ai(1,obj.vars.G.i(i,j,:,idx)) = -1;
             obj = obj.addLinearConstraints(Ai, bi, [], []);
 
             Aeq = sparse(1,obj.nv);
             beq = 1;
-            Aeq(1,obj.vars.F.i(i,j,6,s)) = 1;
-            Aeq(1,obj.vars.H.i(i,j,:,s)) = 1;
-            Aeq(1,obj.vars.G.i(i,j,:,s)) = 1;
+            Aeq(1,obj.vars.F.i(i,j,6)) = 1;
+            Aeq(1,obj.vars.H.i(i,j,:,idx)) = 1;
+            Aeq(1,obj.vars.G.i(i,j,:,idx)) = 1;
             obj = obj.addLinearConstraints([], [], Aeq, beq);
           end
         end
       end
 
       % performs XOR sequentially
-      for s = 1:obj.n_samples
-        n = 1;
-        for i = 1:obj.n_pushers
-          for j = 1:M
-            if j == 1 && i == 1
-              obj = obj.addXORConstraint(obj.vars.c.i(1,1,s),obj.vars.F.i(1,1,1,s),obj.vars.F.i(1,2,1,s));
-            else 
-              if j < M
-                obj = obj.addXORConstraint(obj.vars.c.i(n,1,s),obj.vars.c.i(n-1,1,s),obj.vars.F.i(i,j+1,1,s));
-              else
-                if i < obj.n_pushers
-                  obj = obj.addXORConstraint(obj.vars.c.i(n,1,s),obj.vars.c.i(n-1,1,s),obj.vars.F.i(i+1,1,1,s));
-                end
+      n = 1;
+      for i = 1:obj.n_pushers
+        for j = 1:M
+          if j == 1 && i == 1
+            obj = obj.addXORConstraint(obj.vars.c.i(1,1),obj.vars.F.i(1,1,1),obj.vars.F.i(1,2,1));
+          else 
+            if j < M
+              obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i,j+1,1));
+            else
+              if i < obj.n_pushers
+                obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i+1,1,1));
               end
             end
-            n = n + 1;
           end
+          n = n + 1;
         end
       end
 
       % requires that F adds to an odd value when Th = 1
-      for s = 1:obj,n_samples
-        Ai = sparse(2,obj.nv);
-        bi = [1;-1];
-        Ai(1,obj.vars.c.i(end,end,s)) = 1;
-        Ai(2,obj.vars.c.i(end,end,s)) = -1;
-        Ai(:,obj.vars.Th.i(s,1)) = -K;
-        obj = obj.addLinearConstraints([], [], Aeq, beq);
-      end
+      Ai = sparse(2,obj.nv);
+      bi = [1;-1];
+      Ai(1,obj.vars.c.i(end,end)) = 1;
+      Ai(2,obj.vars.c.i(end,end)) = -1;
+      Ai(:,obj.vars.Th.i(1,idx)) = -K;
+      obj = obj.addLinearConstraints(Ai, bi, [], []);
 
       % small difference to avoid including edges
       dx = 0.01;
 
-      for s = 1:obj.n_samples
-        for n = 1:obj.n_pushers
-          idx_1 = n;
-          idx_2 = mod(n+1,obj.n_pushers);
-          if(idx_2 == 0); idx_2 = obj.n_pushers; end
-          for i = 1:M
-            for j = 1:M
-              % adds the constraint when the 
-              % polygon is not intersecting
-              Ai = sparse(4,obj.nv);
-              bi = 2*K*ones(4,1);
+      for n = 1:obj.n_pushers
+        idx_1 = n;
+        idx_2 = mod(n+1,obj.n_pushers);
+        if(idx_2 == 0); idx_2 = obj.n_pushers; end
+        for i = 1:M
+          for j = 1:M
+            % adds the constraint when the 
+            % polygon is not intersecting
+            Ai = sparse(4,obj.nv);
+            bi = 2*K*ones(4,1);
 
-              Ai(1:2,obj.vars.p.i(2,idx_1)) = -1;
-              Ai(1:2,obj.vars.p_ref.i(2,s)) = -1;
-              Ai(3:4,obj.vars.p.i(1,idx_1)) = [1;-1];
-              Ai(3:4,obj.vars.p_ref.i(1,s)) = [1;-1];
+            Ai(1:2,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(1:2,obj.vars.p_ref.i(2,idx)) = -1;
+            Ai(3:4,obj.vars.p.i(1,idx_1)) = [1;-1];
+            Ai(3:4,obj.vars.p_ref.i(1,idx)) = [1;-1];
 
-              Ai(:,obj.vars.G.i(idx_1,i,j,s)) = K;
-              Ai(:,obj.vars.F.i(idx_1,i,1,s)) = K;
-              bi(1,1) = bi(1,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(2);
-              bi(2,1) = bi(2,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(2);
-              if obj.Rotate(s)*obj.shape.polygons{i}.center(1) > obj.Rotate(s)*obj.shape.polygons{j}.center(1)
-                bi(3,1) = bi(3,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-                bi(4,1) = bi(4,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              else 
-                bi(3,1) = bi(3,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-                bi(4,1) = bi(4,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-              end
+            rotcent_i = obj.Rotate(idx)*obj.shape.polygons{i}.center;
+            rotcent_j = obj.Rotate(idx)*obj.shape.polygons{j}.center;
 
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-              
-              % if the ray passes above the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1:2,obj.vars.p.i(2,idx_1)) = 1;
-              Ai(1:2,obj.vars.p_ref.i(2,s)) = 1;
-              Ai(1:2,obj.vars.G.i(idx_1,i,j,s)) = K;
-              Ai(1:2,obj.vars.F.i(idx_1,i,2,s)) = K;
-              bi(1,1) = bi(1,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(2) - dx;
-              bi(2,1) = bi(2,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(2) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              % if the ray passes to the right of the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1,obj.vars.p.i(1,idx_1)) = -1;
-              Ai(1,obj.vars.p_ref.i(1,s)) = -1;
-              Ai(2,obj.vars.p.i(1,idx_1)) = -1;
-              Ai(2,obj.vars.p_ref.i(1,s)) = -1;
-              Ai(1:2,obj.vars.G.i(idx_1,i,j,s)) = K;
-              Ai(1:2,obj.vars.F.i(idx_1,i,3,s)) = K;
-              bi(1,1) = bi(1,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(2,1) = bi(2,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              % if the ray passes to the left of the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1,obj.vars.p.i(1,idx_1)) = 1;
-              Ai(1,obj.vars.p_ref.i(1,s)) = 1;
-              Ai(2,obj.vars.p.i(1,idx_1)) = 1;
-              Ai(2,obj.vars.p_ref.i(1,s)) = 1;
-              Ai(1:2,obj.vars.G.i(idx_1,i,j,s)) = K;
-              Ai(1:2,obj.vars.F.i(idx_1,i,4,s)) = K;
-              bi(1,1) = bi(1,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(2,1) = bi(2,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              % adds the constraint constrains when the 
-              % polygon is intersecting with other pusher
-              
-              % the ray intersects the segment
-              Ai = sparse(4,obj.nv);
-              bi = 3*K*ones(4,1);
-
-              Ai(1,obj.vars.p.i(2,idx_1)) = -1;
-              Ai(1,obj.vars.p_ref.i(2,s)) = -1;
-              Ai(2,obj.vars.p.i(2,idx_2)) = -1;
-              Ai(2,obj.vars.p_ref.i(2,s)) = -1;
-              Ai(3,obj.vars.p.i(1,idx_1)) = 1;
-              Ai(3,obj.vars.p_ref.i(1,s)) = 1;
-              Ai(4,obj.vars.p.i(1,idx_2)) = -1;
-              Ai(4,obj.vars.p_ref.i(1,s)) = -1;
-              Ai(:,obj.vars.F.i(idx_1,i,1,s)) = K;
-              Ai(:,obj.vars.H.i(idx_1,i,j,s)) = K;
-              Ai(:,obj.vars.F.i(idx_1,i,5,s)) = K;
-              bi(1,1) = bi(1,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(2);
-              bi(2,1) = bi(2,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(2);
-              bi(3,1) = bi(3,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(4,1) = bi(4,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              Ai = sparse(4,obj.nv);
-              bi = 2*K*ones(4,1);
-
-              Ai(1,obj.vars.p.i(2,idx_1)) = -1;
-              Ai(1,obj.vars.p_ref.i(2,s)) = -1;
-              Ai(2,obj.vars.p.i(2,idx_2)) = -1;
-              Ai(2,obj.vars.p_ref.i(2,s)) = -1;
-              Ai(3,obj.vars.p.i(1,idx_1)) = -1;
-              Ai(3,obj.vars.p_ref.i(1,s)) = -1;
-              Ai(4,obj.vars.p.i(1,idx_2)) = 1;
-              Ai(4,obj.vars.p_ref.i(1,s)) = 1;
-              Ai(:,obj.vars.F.i(idx_1,i,1,s)) = K;
-              Ai(:,obj.vars.H.i(idx_1,i,j,s)) = K;
-              Ai(:,obj.vars.F.i(idx_1,i,5,s)) = -K;
-              bi(1,1) = bi(1,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(2);
-              bi(2,1) = bi(2,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(2);
-              bi(3,1) = bi(3,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(4,1) = bi(4,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-   
-              % the ray passes above the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1,obj.vars.p.i(2,idx_1)) = 1;
-              Ai(1,obj.vars.p_ref.i(2,s)) = 1;
-              Ai(2,obj.vars.p.i(2,idx_2)) = 1;
-              Ai(2,obj.vars.p_ref.i(2,s)) = 1;
-              Ai(:,obj.vars.F.i(idx_1,i,2,s)) = K;
-              Ai(:,obj.vars.H.i(idx_1,i,j,s)) = K;
-              bi(1,1) = bi(1,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(2) - dx;
-              bi(2,1) = bi(2,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(2) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              % if the ray passes to the right of the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1,obj.vars.p.i(1,idx_1)) = -1;
-              Ai(2,obj.vars.p.i(1,idx_2)) = -1;
-              Ai(:,obj.vars.p_ref.i(1,s)) = -1;
-              Ai(:,obj.vars.F.i(idx_1,i,3,s)) = K;
-              Ai(:,obj.vars.H.i(idx_1,i,j,s)) = K;
-              bi(1,1) = bi(1,1) + obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(2,1) = bi(2,1) + obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
-
-              % if the ray passes to the left of the segment
-              Ai = sparse(2,obj.nv);
-              bi = 2*K*ones(2,1);
-
-              Ai(1,obj.vars.p.i(1,idx_1)) = 1;
-              Ai(2,obj.vars.p.i(1,idx_2)) = 1;
-              Ai(:,obj.vars.p_ref.i(1,s)) = 1;
-              Ai(:,obj.vars.F.i(idx_1,i,4,s)) = K;
-              Ai(:,obj.vars.H.i(idx_1,i,j,s)) = K;
-              bi(1,1) = bi(1,1) - obj.Rotate(s)*obj.shape.polygons{i}.center(1) - dx;
-              bi(2,1) = bi(2,1) - obj.Rotate(s)*obj.shape.polygons{j}.center(1) - dx;
-
-              obj = obj.addLinearConstraints(Ai, bi, [], []);
+            Ai(:,obj.vars.G.i(idx_1,i,j,idx)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            bi(1,1) = bi(1,1) + rotcent_i(2);
+            bi(2,1) = bi(2,1) + rotcent_j(2);
+            if rotcent_i(1) > rotcent_j(1)
+              bi(3,1) = bi(3,1) - rotcent_j(1) - dx;
+              bi(4,1) = bi(4,1) + rotcent_i(1) - dx;
+            else 
+              bi(3,1) = bi(3,1) - rotcent_i(1) - dx;
+              bi(4,1) = bi(4,1) + rotcent_j(1) - dx;
             end
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+            
+            % if the ray passes above the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1:2,obj.vars.p.i(2,idx_1)) = 1;
+            Ai(1:2,obj.vars.p_ref.i(2,idx)) = 1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j,idx)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,2)) = K;
+            bi(1,1) = bi(1,1) - rotcent_i(2) - dx;
+            bi(2,1) = bi(2,1) - rotcent_j(2) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the right of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(1,obj.vars.p_ref.i(1,idx)) = -1;
+            Ai(2,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(2,obj.vars.p_ref.i(1,idx)) = -1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j,idx)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,3)) = K;
+            bi(1,1) = bi(1,1) + rotcent_i(1) - dx;
+            bi(2,1) = bi(2,1) + rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the left of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(1,obj.vars.p_ref.i(1,idx)) = 1;
+            Ai(2,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(2,obj.vars.p_ref.i(1,idx)) = 1;
+            Ai(1:2,obj.vars.G.i(idx_1,i,j,idx)) = K;
+            Ai(1:2,obj.vars.F.i(idx_1,i,4)) = K;
+            bi(1,1) = bi(1,1) - rotcent_i(1) - dx;
+            bi(2,1) = bi(2,1) - rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % adds the constraint constrains when the 
+            % polygon is intersecting with other pusher
+            
+            % the ray intersects the segment
+            Ai = sparse(4,obj.nv);
+            bi = 3*K*ones(4,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(1,obj.vars.p_ref.i(2,idx)) = -1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(2,obj.vars.p_ref.i(2,idx)) = -1;
+            Ai(3,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(3,obj.vars.p_ref.i(1,idx)) = 1;
+            Ai(4,obj.vars.p.i(1,idx_2)) = -1;
+            Ai(4,obj.vars.p_ref.i(1,idx)) = -1;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j,idx)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,5)) = K;
+            bi(1,1) = bi(1,1) + rotcent_i(2);
+            bi(2,1) = bi(2,1) + rotcent_j(2);
+            bi(3,1) = bi(3,1) - rotcent_i(1) - dx;
+            bi(4,1) = bi(4,1) + rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            Ai = sparse(4,obj.nv);
+            bi = 2*K*ones(4,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = -1;
+            Ai(1,obj.vars.p_ref.i(2,idx)) = -1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = -1;
+            Ai(2,obj.vars.p_ref.i(2,idx)) = -1;
+            Ai(3,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(3,obj.vars.p_ref.i(1,idx)) = -1;
+            Ai(4,obj.vars.p.i(1,idx_2)) = 1;
+            Ai(4,obj.vars.p_ref.i(1,idx)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,1)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j,idx)) = K;
+            Ai(:,obj.vars.F.i(idx_1,i,5)) = -K;
+            bi(1,1) = bi(1,1) + rotcent_i(2);
+            bi(2,1) = bi(2,1) + rotcent_j(2);
+            bi(3,1) = bi(3,1) + rotcent_i(1) - dx;
+            bi(4,1) = bi(4,1) - rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+ 
+            % the ray passes above the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(2,idx_1)) = 1;
+            Ai(1,obj.vars.p_ref.i(2,idx)) = 1;
+            Ai(2,obj.vars.p.i(2,idx_2)) = 1;
+            Ai(2,obj.vars.p_ref.i(2,idx)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,2)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j,idx)) = K;
+            bi(1,1) = bi(1,1) - rotcent_i(2) - dx;
+            bi(2,1) = bi(2,1) - rotcent_j(2) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the right of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(1,idx_1)) = -1;
+            Ai(2,obj.vars.p.i(1,idx_2)) = -1;
+            Ai(:,obj.vars.p_ref.i(1,idx)) = -1;
+            Ai(:,obj.vars.F.i(idx_1,i,3)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j,idx)) = K;
+            bi(1,1) = bi(1,1) + rotcent_i(1) - dx;
+            bi(2,1) = bi(2,1) + rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % if the ray passes to the left of the segment
+            Ai = sparse(2,obj.nv);
+            bi = 2*K*ones(2,1);
+
+            Ai(1,obj.vars.p.i(1,idx_1)) = 1;
+            Ai(2,obj.vars.p.i(1,idx_2)) = 1;
+            Ai(:,obj.vars.p_ref.i(1,idx)) = 1;
+            Ai(:,obj.vars.F.i(idx_1,i,4)) = K;
+            Ai(:,obj.vars.H.i(idx_1,i,j,idx)) = K;
+            bi(1,1) = bi(1,1) - rotcent_i(1) - dx;
+            bi(2,1) = bi(2,1) - rotcent_j(1) - dx;
+
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
         end
       end
