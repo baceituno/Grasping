@@ -108,44 +108,44 @@ classdef PlanarShape
 			end
 
 			% determines the propierties of the faces
-			% for i = 1:nl
-			% 	% opposition of the faces
-			% 	opposite = [];
+			for i = 1:nl
+				% opposition of the faces
+				opposite = [];
 
-			% 	if obj.lines{j}.isCV
-			% 		opposite = 1:nl;
-			% 	else
-			% 		for j = 1:nl
-			% 			if obj.lines{j}.isCV && j ~= i
-			% 				opposite = [opposite, j];
-			% 			end
-			% 			if abs(obj.lines{i}.angle - obj.lines{j}.angle) == pi
-			% 				opposite = [opposite, j];
-			% 			end
-			% 		end
-			% 	end
+				if obj.lines{j}.isCV
+					opposite = 1:nl;
+				else
+					for j = 1:nl
+						if obj.lines{j}.isCV && j ~= i
+							opposite = [opposite, j];
+						end
+						if abs(obj.lines{i}.angle - obj.lines{j}.angle) == pi
+							opposite = [opposite, j];
+						end
+					end
+				end
 
-			% 	obj.lines{i}.opp = opposite;
+				obj.lines{i}.opp = opposite;
 
-			% 	% co-directionaly of the faces
-			% 	noncod = [];
+				% co-directionaly of the faces
+				noncod = [];
 
-			% 	if obj.lines{j}.isCV
-			% 		noncod = 1:nl;
-			% 	else
-			% 		for j = 1:nl
-			% 			if obj.lines{j}.isCV && j ~= i
-			% 				noncod = [noncod, j];
-			% 			end
-			% 			dif_angs = abs(obj.lines{i}.angle - obj.lines{j}.angle);
-			% 			if dif_angs > 0;
-			% 				noncod = [opposite, j];
-			% 			end
-			% 		end
-			% 	end
+				if obj.lines{j}.isCV
+					noncod = 1:nl;
+				else
+					for j = 1:nl
+						if obj.lines{j}.isCV && j ~= i
+							noncod = [noncod, j];
+						end
+						dif_angs = abs(obj.lines{i}.angle - obj.lines{j}.angle);
+						if dif_angs > 0;
+							noncod = [noncod, j];
+						end
+					end
+				end
 
-			% 	obj.lines{i}.non_cod = non_cod;
-			% end
+				obj.lines{i}.non_cod = noncod;
+			end
 		end
 	end
 end

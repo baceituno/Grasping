@@ -10,10 +10,10 @@ clc; clear all; close all;
 
 % reads the 2 triange shape
 p = PlanarShape('Poly2');
-samples = 7;
+samples = 9;
 
 % sets-up the optimization for 2 fingers
-planner = MixedIntegerFullCagePlanningProblem(p,2,samples);
+planner = MixedIntegerFullCagePlanningProblem(p,3,samples);
 
 % adds the slice constraints
 planner = planner.addSliceConstraints();

@@ -96,40 +96,8 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % defines the line assignment variable
       nl = length(obj.shape.lines);
-      obj = obj.addVariable('line', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 1);
-      obj = obj.addVariable('lambda_l', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 1);
-
-      % defines the log2 binary variables
-      ny = ceil(log2(nl));
-      obj = obj.addVariable('y2', 'B', [ny, obj.n_pushers, obj.n_samples], 0, 1);
-
-      % defines the gray coding on base 2
-      codes = grayCodes(2,ny);
-      codes = codes(1:nl,:);
-
-      % adds the constraints on coding
-      for w = 1:obj.n_samples 
-        for i = 1:obj.n_pushers
-          % for each digit
-          for j = 1:ny
-            Ai = sparse(2, obj.nv);
-            bi = [0;1];
-            % for each lambda
-            for k = 1:nl
-              if codes(k,j) == 1
-                Ai(1, obj.vars.line.i(k,i,w)) = 1;
-              elseif codes(k,j) == 0
-                Ai(2, obj.vars.line.i(k,i,w)) = 1;
-              else
-                error('codes need to be 0 or 1');
-              end  
-            end
-            Ai(1, obj.vars.y2.i(j,i,w)) = -1;
-            Ai(2, obj.vars.y2.i(j,i,w)) = 1;
-            obj = obj.addLinearConstraints(Ai, bi, [], []);
-          end
-        end
-      end
+      obj = obj.addVariable('line', 'B', [nl, obj.n_pushers, obj.n_samples], 0, 1);
+      obj = obj.addVariable('lambda_l', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 0.9);
 
       % big K 
       K = 100;
@@ -172,16 +140,17 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       if obj.n_pushers == 2
         for s = 1:obj.n_samples
           % both fingers must be in contact to have a critical orientation
-          Ai = sparse(1, obj.nv);
-          bi = zeros(1, 1);
+          Ai = sparse(2, obj.nv);
+          bi = zeros(2, 1);
 
-          Ai(1,obj.vars.Th.i(1,s)) = 1;
+          Ai(:,obj.vars.Th.i(1,s)) = 1;
           if s < (obj.n_samples + 1)/2
-            Ai(1,obj.vars.Th.i(1,s+1)) = -1;
-          else 
-            Ai(1,obj.vars.Th.i(1,s-1)) = -1;
+            Ai(:,obj.vars.Th.i(1,s+1)) = -1;
+          else
+            Ai(:,obj.vars.Th.i(1,s-1)) = -1;
           end
-          Ai(1,obj.vars.line.i(:,:,s)) = -1;
+          Ai(1,obj.vars.line.i(:,1,s)) = -1;
+          Ai(2,obj.vars.line.i(:,2,s)) = -1;
 
           obj = obj.addLinearConstraints(Ai, bi, [], []);   
 
@@ -293,7 +262,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % defines the region assignment variable
       nr = length(obj.shape.regions);
-      obj = obj.addVariable('region', 'C', [nr, obj.n_pushers, obj.n_samples], 0, 1);
+      obj = obj.addVariable('region', 'C', [nr, obj.n_pushers], 0, 1);
 
       % defines the log2 binary variables
       ny = ceil(log2(nr));
@@ -304,26 +273,24 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       codes = codes(1:nr,:);
 
       % adds the constraints on coding
-      for w = 1:obj.n_samples 
-        for i = 1:obj.n_pushers
-          % for each digit
-          for j = 1:ny
-            Ai = sparse(2, obj.nv);
-            bi = [0;1];
-            % for each lambda
-            for k = 1:nr
-              if codes(k,j) == 1
-                Ai(1, obj.vars.region.i(k,i,w)) = 1;
-              elseif codes(k,j) == 0
-                Ai(2, obj.vars.region.i(k,i,w)) = 1;
-              else
-                error('codes need to be 0 or 1');
-              end  
-            end
-            Ai(1, obj.vars.y.i(j,i,w)) = -1;
-            Ai(2, obj.vars.y.i(j,i,w)) = 1;
-            obj = obj.addLinearConstraints(Ai, bi, [], []);
+      for i = 1:obj.n_pushers
+        % for each digit
+        for j = 1:ny
+          Ai = sparse(2, obj.nv);
+          bi = [0;1];
+          % for each lambda
+          for k = 1:nr
+            if codes(k,j) == 1
+              Ai(1, obj.vars.region.i(k,i)) = 1;
+            elseif codes(k,j) == 0
+              Ai(2, obj.vars.region.i(k,i)) = 1;
+            else
+              error('codes need to be 0 or 1');
+            end  
           end
+          Ai(1, obj.vars.y.i(j,i)) = -1;
+          Ai(2, obj.vars.y.i(j,i)) = 1;
+          obj = obj.addLinearConstraints(Ai, bi, [], []);
         end
       end
 
@@ -341,7 +308,8 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
             bi = zeros(size(A, 1), 1);
             Ai(:, obj.vars.p.i(1:2,j)) = A*inv(obj.Rotate(i));
             Ai(:, obj.vars.p_ref.i(1:2,i)) = A*inv(obj.Rotate(i));
-            Ai(:, obj.vars.region.i(r,j,i)) = M;
+            Ai(:, obj.vars.region.i(r,j)) = M;
+            Ai(:, obj.vars.Th.i(1,i)) = -M;
             bi(:) = b + M;
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -349,19 +317,13 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       end
 
       % assigns each pusher to one region when Th = 0 (sos1 constraint)
-      for i = 1:obj.n_samples
-        Ai = sparse(2*obj.n_pushers,obj.nv);
-        bi = ones(2*obj.n_pushers,1);
-        for j = 1:obj.n_pushers
-          Ai(2*j-1, obj.vars.region.i(:,j,i)) = 1;
-          Ai(2*j-1, obj.vars.Th.i(1,i)) = -M;
-          bi(2*j-1,1) = 1;
+      for i = 1:obj.n_pushers
+        Aeq = sparse(1,obj.nv);
+        beq = ones(1,1);
 
-          Ai(2*j, obj.vars.region.i(:,j,i)) = -1;
-          Ai(2*j, obj.vars.Th.i(1,i)) = -M;
-          bi(2*j,1) = -1;
-        end
-        obj = obj.addLinearConstraints(Ai, bi, [], []);
+        Aeq(:, obj.vars.region.i(:,i)) = 1;
+
+        obj = obj.addLinearConstraints([], [], Aeq, beq);
       end
     end
 
@@ -524,7 +486,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % number of polygons
       M = length(obj.shape.polygons);
 
-      delta = pi/(2*obj.n_samples-2);
+      delta = 2*pi/(2*obj.n_samples-2);
       obj.d_theta = delta*180/pi;
 
       % big-K number
