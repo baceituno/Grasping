@@ -13,7 +13,7 @@ p = PlanarShape('Poly2');
 samples = 9;
 
 % sets-up the optimization for 2 fingers
-planner = MixedIntegerFullCagePlanningProblem(p,3,samples);
+planner = MixedIntegerFullCagePlanningProblem(p,2,samples);
 
 % adds the slice constraints
 planner = planner.addSliceConstraints();
@@ -40,7 +40,11 @@ planner = planner.addContinuousBoundaryVariationConstraints();
 disp('solving...');
 planner = planner.solve();
 
+r = [];
+
 display('results')
 for i = 1:planner.n_pushers
 	planner.vars.p.value(:,i) + planner.vars.p_ref.value(:,(samples+1)/2)
+	r = [r, planner.vars.p.value(:,i) + planner.vars.p_ref.value(:,(samples+1)/2)];
 end
+

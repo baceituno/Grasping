@@ -97,7 +97,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % defines the line assignment variable
       nl = length(obj.shape.lines);
       obj = obj.addVariable('line', 'B', [nl, obj.n_pushers, obj.n_samples], 0, 1);
-      obj = obj.addVariable('lambda_l', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 0.9);
+      obj = obj.addVariable('lambda_l', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 1);
 
       % big K 
       K = 100;
@@ -112,24 +112,37 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           obj = obj.addLinearConstraints(Ai, bi, [], []);
 
           for l = 1:nl
-            Ai = sparse(4, obj.nv);
-            bi = K*ones(4, 1);
+            % only in one line
+            Ai = sparse(1, obj.nv);
+            bi = zeros(1,1);
+
+            Ai(1,obj.vars.line.i(l,i,s)) = -1;
+            Ai(1,obj.vars.lambda_l.i(l,i,s)) = 1;
+            
+            obj = obj.addLinearConstraints(Ai, bi, [], []);
+
+            % line assignment via big-M formulation
+            Ai = sparse(4,obj.nv);
+            bi = K*ones(4,1);
+
+            v1 = obj.Rotate(s)*obj.shape.lines{l}.v1;
+            v2 = obj.Rotate(s)*obj.shape.lines{l}.v2;
+
+            Ai(1:4,obj.vars.line.i(l,i,s)) = K;
 
             Ai(1:2,obj.vars.p.i(:,i)) = eye(2);
             Ai(1:2,obj.vars.p_ref.i(:,s)) = eye(2);
 
-            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = -obj.Rotate(s)*obj.shape.lines{l}.v1;
-            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = obj.Rotate(s)*obj.shape.lines{l}.v2;
-            bi(1:2) = bi(1:2) + obj.Rotate(s)*obj.shape.lines{l}.v2;
+            Ai(1:2,obj.vars.lambda_l.i(l,i,s)) = v2-v1;
+
+            bi(1:2) = bi(1:2) + v2;
 
             Ai(3:4,obj.vars.p.i(:,i)) = -eye(2);
             Ai(3:4,obj.vars.p_ref.i(:,s)) = -eye(2);
 
-            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = obj.Rotate(s)*obj.shape.lines{l}.v1;
-            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = -obj.Rotate(s)*obj.shape.lines{l}.v2;
-            bi(3:4) = bi(3:4) - obj.Rotate(s)*obj.shape.lines{l}.v2; 
-            
-            Ai(:,obj.vars.line.i(l,i,s)) = K;
+            Ai(3:4,obj.vars.lambda_l.i(l,i,s)) = v1-v2;
+
+            bi(3:4) = bi(3:4) + -v2;
 
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -298,7 +311,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       M = 10;
 
       % regions assignment constraint
-      for i = 1:obj.n_samples
+      for s = 1:obj.n_samples
         for r = 1:nr
           A = obj.shape.regions{r}.A;
           b = obj.shape.regions{r}.b;
@@ -306,10 +319,14 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           for j = 1:obj.n_pushers
             Ai = sparse(size(A, 1), obj.nv);
             bi = zeros(size(A, 1), 1);
-            Ai(:, obj.vars.p.i(1:2,j)) = A*inv(obj.Rotate(i));
-            Ai(:, obj.vars.p_ref.i(1:2,i)) = A*inv(obj.Rotate(i));
+            Ai(:, obj.vars.p.i(1:2,j)) = A*inv(obj.Rotate(s));
+            Ai(:, obj.vars.p_ref.i(1:2,s)) = A*inv(obj.Rotate(s));
             Ai(:, obj.vars.region.i(r,j)) = M;
-            Ai(:, obj.vars.Th.i(1,i)) = -M;
+            if s < (obj.n_samples+1)/2
+              Ai(:, obj.vars.Th.i(1,s+1)) = -M;
+            else
+              Ai(:, obj.vars.Th.i(1,s-1)) = -M;
+            end
             bi(:) = b + M;
             obj = obj.addLinearConstraints(Ai, bi, [], []);
           end
@@ -321,7 +338,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
         Aeq = sparse(1,obj.nv);
         beq = ones(1,1);
 
-        Aeq(:, obj.vars.region.i(:,i)) = 1;
+        Aeq(1, obj.vars.region.i(:,i)) = 1;
 
         obj = obj.addLinearConstraints([], [], Aeq, beq);
       end
