@@ -1,0 +1,4 @@
+Copyright 
+2018 MIT MCube Lab
+2012-2016 Robot Locomotion Group @ CSAIL
+All rights reserved.
