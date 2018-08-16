@@ -60,18 +60,6 @@ classdef Quad_MixedIntegerConvexProgram
       %                     constraints as you wish. If obj.has_symbolic is not true, then
       %                     you cannot, and you must instead construct all of your constraint
       %                     and objective matrices directly.
-      if nargin < 1
-        has_symbolic = false;
-      end
-      if has_symbolic
-        checkDependency('yalmip');
-        obj.symbolic_constraints = lmi();
-      end
-
-      checkDependency('gurobi');
-      
-      obj.has_symbolic = has_symbolic;
-      
       obj.solver = 'gurobi';
     end
 
@@ -243,21 +231,6 @@ classdef Quad_MixedIntegerConvexProgram
       end
     end
 
-    function obj = addSymbolicConstraints(obj, expr)
-      assert(obj.has_symbolic);
-      obj.symbolic_constraints = [obj.symbolic_constraints, expr];
-    end
-
-    function obj = addSymbolicCost(obj, expr)
-      assert(obj.has_symbolic);
-      obj = obj.addSymbolicObjective(expr);
-    end
-
-    function obj = addSymbolicObjective(obj, expr)
-      assert(obj.has_symbolic);
-      obj.symbolic_objective = obj.symbolic_objective + expr;
-    end
-
     function obj = convertPolyCones(obj)
       % Build linear constraints for our polygonal cone approximations
       nconstraints = sum([obj.polycones.N]);
@@ -295,7 +268,6 @@ classdef Quad_MixedIntegerConvexProgram
     end
 
     function [obj, solvertime, objval] = solveGurobi(obj, params)
-      checkDependency('gurobi');
       if nargin < 2
         params = struct();
       end
@@ -366,53 +338,7 @@ classdef Quad_MixedIntegerConvexProgram
       end
     end
 
-    function [obj, solvertime, objval] = solveYalmip(obj, params)
-      checkDependency('gurobi');
-      constraints = obj.symbolic_constraints;
-      objective = obj.symbolic_objective;
-
-      if nargin < 2 || isempty(params)
-        params = sdpsettings('solver', 'gurobi', 'verbose', 0);
-      end
-
-      % Now add in any constraints or objectives which were declared non-symbolically
-      objective = objective + obj.symbolic_vars' * obj.Q * obj.symbolic_vars + obj.c' * obj.symbolic_vars + obj.objcon;
-      constraints = [constraints,...
-        obj.Aeq * obj.symbolic_vars == obj.beq,...
-        obj.A * obj.symbolic_vars <= obj.b,...
-        ];
-      var_names = fieldnames(obj.vars);
-      for j = 1:length(var_names)
-        name = var_names{j};
-        constraints = [constraints,...
-         obj.vars.(name).lb <= obj.vars.(name).symb,...
-         obj.vars.(name).symb <= obj.vars.(name).ub];
-       end
-      for j = 1:length(obj.quadcon)
-        constraints = [constraints,...
-          obj.symbolic_vars' * obj.quadcon(j).Qc * obj.symbolic_vars + obj.quadcon(j).q' * obj.symbolic_vars <= obj.quadcon(j).rhs];
-      end
-      for j = 1:length(obj.cones)
-        constraints = [constraints,...
-          cone(obj.symbolic_vars(obj.cones(j).index(2:end)), obj.symbolic_vars(obj.cones(j).index(1)))];
-      end
-      for j = 1:length(obj.polycones)
-        constraints = [constraints,...
-          polycone(obj.symbolic_vars(obj.polycones(j).index(2:end)), obj.symbolic_vars(obj.polycones(j).index(1)), obj.polycones(j).N)];
-      end
-
-      diagnostics = optimize(constraints, objective, params);
-      ok = diagnostics.problem == 0 || diagnostics.problem == -1;
-      if ~ok
-        error('Drake:MixedIntegerConvexProgram:InfeasibleProblem', 'The mixed-integer problem is infeasible.');
-      end
-      objval = double(objective);
-      solvertime = diagnostics.solvertime;
-      obj = obj.extractResult(double(obj.symbolic_vars));
-    end
-    
     function [obj,solvertime,objval] = solveMosek(obj)
-      checkDependency('mosek');
       prob = obj.getMosekModel();
       params = struct();
       start_time = clock();
@@ -478,13 +404,6 @@ classdef Quad_MixedIntegerConvexProgram
     end
     
     function obj = setSolver(obj,solver)
-      if(strcmpi(solver,'gurobi'))
-        checkDependency('gurobi');
-      elseif(strcmpi(solver,'mosek'))
-        checkDependency('mosek');
-      else
-        error('Drake:MixedIntegerConvexProgram:UnsupportedSolver','Solver not supported yet');
-      end
       obj.solver = solver;
     end
   end
