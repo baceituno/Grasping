@@ -86,6 +86,13 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
         obj = obj.addLinearConstraints(Ai, bi, [], []);
       end
+
+      Aeq = sparse(2,obj.nv);
+      beq = zeros(2,1);
+
+      Aeq(:,obj.vars.p_ref.i(:,(obj.n_samples+1)/2)) = eye(2);
+
+      obj = obj.addLinearConstraints([],[],Aeq,beq);
     end
 
     function obj = addLimitOrientationConstraints(obj)
@@ -323,7 +330,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(:, obj.vars.p_ref.i(1:2,s)) = A*inv(obj.Rotate(s));
             Ai(:, obj.vars.region.i(r,j)) = M;
             if s < (obj.n_samples+1)/2
-              Ai(:, obj.vars.Th.i(1,s+1)) = -M;
+              Ai(:, obj.vars.Th.i(1,s)) = -M;
             else
               Ai(:, obj.vars.Th.i(1,s-1)) = -M;
             end
@@ -344,7 +351,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       end
     end
 
-    function obj = addCircleConstraint(obj)
+    function obj = addLoopConstraint(obj)
       % Add mixed-integer constraints that require that 
       % the graph formed by the intersection of the 
       % C-space pushers forms a cyclic graph.
@@ -635,23 +642,33 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
 
       % performs XOR sequentially
       n = 1;
-      for i = 1:obj.n_pushers
-        for j = 1:M
-          if j == 1 && i == 1
-            obj = obj.addXORConstraint(obj.vars.c.i(1,1),obj.vars.F.i(1,1,1),obj.vars.F.i(1,2,1));
-          else 
-            if j < M
-              obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i,j+1,1));
-            else
-              if i < obj.n_pushers
-                obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i+1,1,1));
+      
+      if M > 1
+        for i = 1:obj.n_pushers
+          for j = 1:M
+            if j == 1 && i == 1
+              obj = obj.addXORConstraint(obj.vars.c.i(1,1),obj.vars.F.i(1,1,1),obj.vars.F.i(1,2,1));
+            else 
+              if j < M
+                obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i,j+1,1));
+              else
+                if i < obj.n_pushers
+                  obj = obj.addXORConstraint(obj.vars.c.i(n,1),obj.vars.c.i(n-1,1),obj.vars.F.i(i+1,1,1));
+                end
               end
             end
+            n = n + 1;
           end
-          n = n + 1;
+        end
+      else
+        for i = 1:obj.n_pushers-1
+          if i == 1
+            obj = obj.addXORConstraint(obj.vars.c.i(i,1),obj.vars.F.i(end,1,1),obj.vars.F.i(end-i,1,1));
+          else 
+            obj = obj.addXORConstraint(obj.vars.c.i(i,1),obj.vars.c.i(i-1,1),obj.vars.F.i(end-i,1,1));
+          end
         end
       end
-
       % requires that F adds to an odd value when Th = 1
       Ai = sparse(2,obj.nv);
       bi = [1;-1];

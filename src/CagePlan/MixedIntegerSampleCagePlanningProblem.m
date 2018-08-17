@@ -1,4 +1,4 @@
-classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
+classdef MixedIntegerSampleCagePlanningProblem < Quad_MixedIntegerConvexProgram
 % Developed by Bernardo Aceituno-C (MIT MCube Lab)
 %           and Hongkai Dai (Toyota Research Institute)
   properties
@@ -8,7 +8,7 @@ classdef MixedIntegerCagePlanningProblem < Quad_MixedIntegerConvexProgram
   end
 
   methods
-    function obj = MixedIntegerCagePlanningProblem(shape, n_pushers)
+    function obj = MixedIntegerSampleCagePlanningProblem(shape, n_pushers)
       % Constructs the optimization problem and declares the variables for each contact
       % @param shape: structure with elements:
       %               - shape.polygons : a disjunctive set of convex polygons which union 

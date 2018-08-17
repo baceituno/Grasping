@@ -1,6 +1,7 @@
 classdef Quad_MixedIntegerConvexProgram
-% THE CODE FROM THIS CLASS HAS BEEN ADAPTED FROM AN OLD MATLAB DISTRIBUTIO
-% OF THE "Drake" ROBOTICS AND SIMULATION LIBRARY.
+% THE CODE FROM THIS CLASS HAS BEEN ADAPTED FROM AN OLD MATLAB DISTRIBUTION
+% OF THE "DRAKE" ROBOTICS AND SIMULATION TOOLBOX, DEVELOPED BY THE MIT ROBOT LOCOMOTION GROUP.
+% READ LICENCE FOR REFERENCE
 
 % This class is meant to represent general mixed-integer linear, quadratic, quadratically-constrained, and second-order-cone programs. It allows you to define symbolic constraints using Yalmip, which are typically easy to prototype, or to define low-level constraints by directly constructing the A, b, Aeq, beq, etc. matrices, which is typically much faster. For an example of usage, see the MixedIntegerFootstepPlanningProblem subclass. 
   properties

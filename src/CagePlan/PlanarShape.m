@@ -83,6 +83,8 @@ classdef PlanarShape
 				if obj.lines{i}.v2(2) > obj.lines{i}.v1(2)
 					if obj.lines{i}.v2(1) > obj.lines{i}.v1(1)
 						obj.lines{i}.angle = -atan(dy/dx);
+					elseif obj.lines{i}.v2(1) == obj.lines{i}.v1(1)
+						obj.lines{i}.angle = 0;
 					else
 						obj.lines{i}.angle = atan(dy/dx);
 					end

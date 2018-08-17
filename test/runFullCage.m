@@ -8,12 +8,13 @@
 display('Clearing workspace')
 clc; clear all; close all;
 
-% reads the 2 triange shape
+% reads a planar shape
 p = PlanarShape('Poly2');
 samples = 9;
+pushers = 3;
 
-% sets-up the optimization for 2 fingers
-planner = MixedIntegerFullCagePlanningProblem(p,2,samples);
+% sets-up the optimization program
+planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples);
 
 % adds the slice constraints
 planner = planner.addSliceConstraints();
@@ -25,12 +26,12 @@ planner = planner.addLimitOrientationConstraints();
 planner = planner.addNoCollisionConstraint();
 
 % adds the closed graph constraints
-planner = planner.addCircleConstraint();
+planner = planner.addLoopConstraint();
 
 % adds the enclosing constraints
 planner = planner.addEnclosingConstraint();
 
-% adds the continuous boundary constriants
+% adds the continuous boundary constraints
 planner = planner.addContinuousBoundaryVariationConstraints();
 
 % adds the cost function
@@ -40,11 +41,9 @@ planner = planner.addContinuousBoundaryVariationConstraints();
 disp('solving...');
 planner = planner.solve();
 
-r = [];
-
 display('results')
+r = [];
 for i = 1:planner.n_pushers
-	planner.vars.p.value(:,i) + planner.vars.p_ref.value(:,(samples+1)/2)
+	planner.vars.p.value(:,i)
 	r = [r, planner.vars.p.value(:,i) + planner.vars.p_ref.value(:,(samples+1)/2)];
 end
-
