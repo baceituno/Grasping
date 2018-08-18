@@ -44,7 +44,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('p', 'C', [2, obj.n_pushers], -inf, inf);
 
       % Hand location
-      obj = obj.addVariable('p_ref', 'C', [2, obj.n_samples], -inf, inf);
+      obj = obj.addVariable('p_ref', 'C', [2, obj.n_samples], 0, 0);
 
       % Critical Slice
       obj = obj.addVariable('Th', 'B', [1, obj.n_samples], 0, 1);
@@ -99,7 +99,6 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % Constrains the conditions required for the object to reach a limit orientation,
       % depending on the number of pushers. A limit orientation is that for which the
       % object is fully impobilized by the pushers, with a zero-area free-space.
-
 
       % defines the line assignment variable
       nl = length(obj.shape.lines);
@@ -315,13 +314,14 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       end
 
       % big-M
-      M = 10;
+      M = 100;
 
       % regions assignment constraint
       for s = 1:obj.n_samples
         for r = 1:nr
           A = obj.shape.regions{r}.A;
           b = obj.shape.regions{r}.b;
+
           % constrains for each finger
           for j = 1:obj.n_pushers
             Ai = sparse(size(A, 1), obj.nv);
@@ -330,7 +330,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
             Ai(:, obj.vars.p_ref.i(1:2,s)) = A*inv(obj.Rotate(s));
             Ai(:, obj.vars.region.i(r,j)) = M;
             if s < (obj.n_samples+1)/2
-              Ai(:, obj.vars.Th.i(1,s)) = -M;
+              Ai(:, obj.vars.Th.i(1,s+1)) = -M;
             else
               Ai(:, obj.vars.Th.i(1,s-1)) = -M;
             end
@@ -340,13 +340,11 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
         end
       end
 
-      % assigns each pusher to one region when Th = 0 (sos1 constraint)
+      % assigns each pusher to one region (sos1 constraint)
       for i = 1:obj.n_pushers
         Aeq = sparse(1,obj.nv);
         beq = ones(1,1);
-
         Aeq(1, obj.vars.region.i(:,i)) = 1;
-
         obj = obj.addLinearConstraints([], [], Aeq, beq);
       end
     end
@@ -356,7 +354,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % the graph formed by the intersection of the 
       % C-space pushers forms a cyclic graph.
 
-      % Defines the polygon interserction matrices
+      % Defines the polygon intersection matrices
       M = length(obj.shape.polygons);
       obj = obj.addVariable('H','B',[obj.n_pushers,M,M,obj.n_samples], 0, 1);
       obj = obj.addVariable('G','B',[obj.n_pushers,M,M,obj.n_samples], 0, 1);
@@ -669,13 +667,11 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
           end
         end
       end
-      % requires that F adds to an odd value when Th = 1
-      Ai = sparse(2,obj.nv);
-      bi = [1;-1];
-      Ai(1,obj.vars.c.i(end,end)) = 1;
-      Ai(2,obj.vars.c.i(end,end)) = -1;
-      Ai(:,obj.vars.Th.i(1,idx)) = -K;
-      obj = obj.addLinearConstraints(Ai, bi, [], []);
+      % requires that F adds to an odd value
+      Aeq = sparse(1,obj.nv);
+      beq = 1;
+      Aeq(1,obj.vars.c.i(end,end)) = 1;
+      obj = obj.addLinearConstraints([], [], Aeq, beq);
 
       % small difference to avoid including edges
       dx = 0.01;

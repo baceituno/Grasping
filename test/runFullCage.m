@@ -9,9 +9,9 @@ display('Clearing workspace')
 clc; clear all; close all;
 
 % reads a planar shape
-p = PlanarShape('Poly2');
+p = PlanarShape('Poly1');
 samples = 9;
-pushers = 3;
+pushers = 5;
 
 % sets-up the optimization program
 planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples);
