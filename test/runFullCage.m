@@ -9,9 +9,9 @@ display('Clearing workspace')
 clc; clear all; close all;
 
 % reads a planar shape
-p = PlanarShape('Poly1');
+p = PlanarShape('Poly3');
 samples = 9;
-pushers = 5;
+pushers = 4;
 
 % sets-up the optimization program
 planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples);
@@ -35,7 +35,7 @@ planner = planner.addEnclosingConstraint();
 planner = planner.addContinuousBoundaryVariationConstraints();
 
 % adds the cost function
-% planner = planner.addCostFunction();
+planner = planner.addCostFunction();
 
 % solves the optimization
 disp('solving...');

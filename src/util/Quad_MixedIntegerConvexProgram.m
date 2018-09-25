@@ -272,7 +272,7 @@ classdef Quad_MixedIntegerConvexProgram
       if nargin < 2
         params = struct();
       end
-      params = applyDefaults(params, struct('outputflag', 1));
+      params = struct('outputflag', 0);
       model = obj.getGurobiModel();
       t0 = tic();
       result = gurobi(model, params);
