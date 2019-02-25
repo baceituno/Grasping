@@ -7,37 +7,50 @@
 display('Clearing workspace')
 clc; clear all; close all;
 
-% reads the T shape
+% reads a planar shape
+nv = 7;
 p = PlanarShape('PolyT');
+samples = 9;
+pushers = 4;
 
-% sets-up the optimization for 2 fingers
-planner = MixedIntegerPathCagePlanningProblem(p);
+% sets-up the optimization program
+planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples);
+
+% adds the slice constraints
+planner = planner.addSliceConstraints();
+
+% adds the limit orientation constraints
+planner = planner.addLimitOrientationConstraints();
 
 % adds the convex region constraints
 planner = planner.addNoCollisionConstraint();
 
 % adds the closed graph constraints
-planner = planner.addCircleConstraint();
+planner = planner.addLoopConstraint();
 
 % adds the enclosing constraints
 planner = planner.addEnclosingConstraint();
 
-% planner constraints
+% adds the continuous boundary constraints
+planner = planner.addContinuousBoundaryVariationConstraints();
+
+% adds the continuous boundary constraints
 planner = planner.addYumiKinConstraints();
-planner = planner.addIntegrationConstraints();
 
 % adds the cost function
-planner = planner.addCostFunction();
+% planner = planner.addCostFunction();
 
 % solves the optimization
 disp('solving...');
 planner = planner.solve();
 
 display('results')
-planner.vars.p.value
+r = [];
+for i = 1:planner.n_pushers
+	planner.vars.p.value(:,i)
+	r = [r, planner.vars.p.value(:,i) + planner.vars.p_ref.value(:,(samples+1)/2)];
+end
 
-
-% draws the result
 figure(1)
 v = [];
 for i = 1:length(p.polygons)

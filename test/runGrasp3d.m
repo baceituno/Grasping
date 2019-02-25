@@ -1,7 +1,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Bernardo Aceituno C.         %
-% USB C Laboratory             %
-% Mechatronics Research Group  %
+% MIT MCube Lab				   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Run Grasp planner on a box

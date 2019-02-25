@@ -272,7 +272,7 @@ classdef Quad_MixedIntegerConvexProgram
       if nargin < 2
         params = struct();
       end
-      params = struct('outputflag', 0);
+      params = struct('outputflag', 1);
       model = obj.getGurobiModel();
       t0 = tic();
       result = gurobi(model, params);
@@ -280,12 +280,15 @@ classdef Quad_MixedIntegerConvexProgram
 
       ok = ~(strcmp(result.status, 'INFEASIBLE') || strcmp(result.status, 'INF_OR_UNBD'));
       if ~ok
-        error('Drake:MixedIntegerConvexProgram:InfeasibleProblem', 'The mixed-integer problem is infeasible.');
+        warning('Drake:MixedIntegerConvexProgram:InfeasibleProblem', 'The mixed-integer problem is infeasible.');
+        objval = inf;
+        solvertime = 0;
+        obj = obj;
+      else
+        objval = result.objval;
+        solvertime = result.runtime;
+        obj = obj.extractResult(result.x);
       end
-      
-      objval = result.objval;
-      solvertime = result.runtime;
-      obj = obj.extractResult(result.x);
     end
 
     function model = getGurobiModel(obj)
