@@ -8,7 +8,6 @@ display('Clearing workspace')
 clc; clear all; close all;
 
 % reads a planar shape
-nv = 7;
 p = PlanarShape('PolyT');
 samples = 9;
 pushers = 4;

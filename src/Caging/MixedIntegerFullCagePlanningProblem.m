@@ -48,7 +48,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addVariable('p', 'C', [2, obj.n_pushers], -inf, inf);
 
       % Hand location
-      obj = obj.addVariable('p_ref', 'C', [2, obj.n_samples], 0, 0);
+      obj = obj.addVariable('p_ref', 'C', [2, obj.n_samples], -inf, inf);
 
       % Critical Slice
       obj = obj.addVariable('Th', 'B', [1, obj.n_samples], 0, 1);
@@ -99,27 +99,26 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       obj = obj.addLinearConstraints([],[],Aeq,beq);
     end
 
-    function obj = addLimitOrientationConstraints(obj)
+    function obj = addLimitOrientationConstraints(obj, leave_free)
       % Constrains the conditions required for the object to reach a limit orientation,
       % depending on the number of pushers. A limit orientation is that for which the
       % object is fully impobilized by the pushers, with a zero-area free-space.
+
+      if(nargin<2) leave_free = 0; end;
 
       % defines the line assignment variable
       nl = length(obj.shape.lines);
       obj = obj.addVariable('line', 'B', [nl, obj.n_pushers, obj.n_samples], 0, 1);
       obj = obj.addVariable('lambda_l', 'C', [nl, obj.n_pushers, obj.n_samples], 0, 1);
 
-      Aeq = sparse(2, obj.nv);
-      beq = [1;1];
-      Aeq(1,obj.vars.Th.i(1,1)) = 1;
-      Aeq(2,obj.vars.Th.i(1,end)) = 1;
-      obj = obj.addLinearConstraints([], [], Aeq, beq);
-
-      Ai = sparse(1, obj.nv);
-      bi = -2;
-      Ai(1,obj.vars.Th.i(1,:)) = -1;
-      % obj = obj.addLinearConstraints(Ai, bi, [], []);
-
+      if leave_free == 0
+        Aeq = sparse(2, obj.nv);
+        beq = [1;1];
+        Aeq(1,obj.vars.Th.i(1,1)) = 1;
+        Aeq(2,obj.vars.Th.i(1,end)) = 1;
+        obj = obj.addLinearConstraints([], [], Aeq, beq);
+      end
+      
       % big K 
       K = 100;
 
@@ -525,7 +524,7 @@ classdef MixedIntegerFullCagePlanningProblem < Quad_MixedIntegerConvexProgram
       % number of polygons
       M = length(obj.shape.polygons);
 
-      delta = 2*pi/(12*obj.n_samples-2);
+      delta = (obj.angles(end)-obj.angles(1))/(12*obj.n_samples-2);
       obj.d_theta = delta*180/pi;
 
       % big-K number

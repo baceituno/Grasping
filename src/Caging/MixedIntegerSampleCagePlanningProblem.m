@@ -21,7 +21,7 @@ classdef MixedIntegerSampleCagePlanningProblem < Quad_MixedIntegerConvexProgram
       %                                  space of the shape
       %               - shape.nv       : Number of vertices in all the polygons of the shape
       % @param n_pushers: number of fingers of the gripper
-
+      
       assert(nargin > 0);
       if nargin < 2; n_pushers = 3; end
 

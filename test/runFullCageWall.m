@@ -8,15 +8,15 @@ display('Clearing workspace')
 clc; clear all; close all;
 
 % reads a planar shape
-nv = 4;
 wall = 5;
 n_push = 2;
 p = PlanarShape('PolyT');
-samples = 9;
+samples = 5;
+angles = linspace(-pi/16,pi/16,samples);
 pushers = n_push+wall;
 
 % sets-up the optimization program
-planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples);
+planner = MixedIntegerFullCagePlanningProblem(p,pushers,samples,angles);
 
 % adds the slice constraints
 planner = planner.addSliceConstraints();

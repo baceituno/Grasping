@@ -12,34 +12,7 @@ nv = 4;
 p = PlanarShape('PolyS');
 samples = 9;
 pushers = 4;
-
-delta = [];
-% checks for concave vertexes
-for i = 1:length(p.lines)
-	idxp = i+1;
-	idxm = i-1;
-	if i == 1; idxm = length(p.lines); end;
-	if i == length(p.lines) ;idxp = 1; end;
-
-	if p.lines{i}.isCV
-		dif = abs(p.lines{idxp}.angle-p.lines{idxm}.angle)/2;
-		delta = [delta, dif];
-	end
-end
-
-delta = delta/2;
-
-if size(delta,1)>0
-	dth = min(delta);
-
-	angs = dth*(samples-1)/2;
-
-	angles = linspace(-angs,angs,samples);
-else 
-	angles = linspace(-pi/12,pi/12,samples);
-end
-	
-angles*180/pi
+angles = linspace(-pi/8,pi/8,samples);
 
 results = {};
 k = 1;
@@ -106,6 +79,9 @@ for j = 1:planner.n_pushers
 	axis square
 	hold on
 end
+
+axis square
+
 % draws the C-space slice
 figure(2)
 for j = 1:planner.n_pushers
@@ -117,3 +93,5 @@ for j = 1:planner.n_pushers
 		hold on
 	end
 end
+
+axis square
